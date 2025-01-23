@@ -1,0 +1,15 @@
+# This is a comment
+FibN = alg {
+	i = 0;
+	X = 1;
+	Y = 1;
+	while i < N-1 {
+		Z = Y + X;
+		X = Y;
+		Y = Z;
+		i = i + 1;
+	}
+	return Y;
+};
+
+print FibN{N=2;};
