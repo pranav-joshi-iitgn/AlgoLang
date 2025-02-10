@@ -10,7 +10,7 @@ spaces = " \t"
 comS = "#"
 newline = "\n\r"
 
-keywords = ["while","if",'else','elif','type','in','and','or','not','True','False',"None","print",'run','list','return','alg']
+keywords = ["while","if",'else','elif','type','in','and','or','not','True','False',"None","print",'run','list','return','alg','with','vec','plot']
 
 chartypes = [digits,alphas,dot,brak,op1,op2,equal,quotes,spaces,newline,comS]
 
