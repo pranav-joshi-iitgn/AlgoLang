@@ -1,0 +1,18 @@
+f = alg(x){
+	g = alg(){
+		print x;
+	};
+	return g;
+};
+g = f(1);
+print g;
+h = alg(a){
+	k = alg(){
+		print a;
+	};
+	return k;
+};
+k=h(g);
+print k;
+x = 2;
+y = g();

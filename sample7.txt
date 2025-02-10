@@ -1,0 +1,15 @@
+x = vec 100;
+i = 0;
+while i< 100 {
+    x[i] = 3.14 * i/100;
+i = i + 1;
+}
+n = 3;
+f = x;
+y = x;
+while n < 100 {
+    f = - x*x * f/(n*(n-1));
+    y = y + f;
+    n = n+2;
+}
+plot (x,y);
