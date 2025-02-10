@@ -1,6 +1,8 @@
 from LEXER import *
 from graphviz import Digraph
 from ast import literal_eval
+import termplotlib as plt
+from numpy import *
 """
 BODMAS
 The grammar for this language is ..
@@ -9,7 +11,7 @@ W -> while CS0 F
 I -> if CS0 F
 S1 -> P; | A; | R; | D;
 P -> print CS0
-R -> run id
+R -> run id | run CS0 with CSV
 Ret -> return CS0
 A -> V = CS0 | V = F
 F -> { S0 }
@@ -35,11 +37,17 @@ E7 -> - E8 | E8
 E8 -> (CS0) | E9
 E9 -> int | float | str | V | Al
 V -> id [ E0 ] | id
-Al -> alg F
+Al -> alg (CSV) F | alg F
+CSV -> id,CSV | id
 
 """
 Graph = Digraph("AST")
 cur_node = 0
+
+def to_tuple(L):
+    if isinstance(L,list) or isinstance(L,tuple):
+        return tuple(x for x in L)
+    else:return L
 
 class Node:
     name = "Node"
@@ -56,11 +64,17 @@ class Node:
     def PlotTree(self):
         global Graph,cur_node
         self.id = str(cur_node)
-        Graph.node(self.id,self.name)
-        cur_node += 1
-        for child in self.children:
-            child.PlotTree()
-            Graph.edge(self.id,child.id)
+        if len(self.children) > 1 or len(self.children) == 0:
+            Graph.node(self.id,self.name)
+            cur_node += 1
+            for child in self.children:
+                cid = child.PlotTree()
+                Graph.edge(self.id,cid)
+            return self.id
+        if len(self.children) == 1:
+            child = self.children[0]
+            cid = child.PlotTree()
+            return cid
 
 class Token:
     def __init__(self,value):
@@ -76,6 +90,7 @@ class Token:
         self.id = str(cur_node)
         Graph.node(self.id,self.value)
         cur_node += 1
+        return self.id
 
 class Number(Token):
     name = "Number"
@@ -107,9 +122,6 @@ class Id(Token):
     def __init__(self,value):
         self.value = value
         self.name = value
-        SYMBOLS = SYMBOLSTACK[-1]
-        if value not in SYMBOLS:
-            SYMBOLS[value] = None
     def eval(self):
         x = self.value
         for i in range(len(SYMBOLSTACK)-1,-1,-1):
@@ -120,6 +132,8 @@ class Id(Token):
 
 class F(Node):
     name = "F"
+    args = ()
+    env = {}
     def parse(self,s:list):
         self.value = s
         n = len(s)
@@ -129,11 +143,30 @@ class F(Node):
         body = S0()
         body.parse(s[1:-1])
         self.children = [Token("{"),body,Token("}")]
-    def eval(self):
+    def eval(self,argvals=[]):
+        if len(argvals) > len(self.args):raise ValueError("Too many values in function call")
+        SYMBOLS = SYMBOLSTACK[-1]
+        for k in self.env:
+            SYMBOLS[k] = self.env[k]
+        for i in range(len(argvals)):
+            SYMBOLS[self.args[i]] = argvals[i]
         body = self.children[1]
         return body.eval()
     def __add__(self,other):
         par = F()
+        env1 = self.env
+        env2 = other.env
+        env = {k:env1[k] for k in env1}
+        for k in env2:
+            if (k in env) and (env[k] is not env2[k]) and (env[k] != env2[k]):
+                raise ValueError("environments did not match for concatenation of algorithms")
+            else: env[k] = env2[k]
+        args = list(self.args)
+        args2 = list(other.args)
+        for x in args2:
+            if x not in args:args.append(x)
+        par.args = args
+        par.env = env
         body =S0()
         body.children = [self.children[1],other.children[1]]
         par.children = [Token("{"),body,Token("}")]
@@ -143,6 +176,37 @@ class F(Node):
         for i in range(other-1):
             to_ret = to_ret + self
         return to_ret
+    def prepr(self):
+        s = "".join([x[1] + ("\n" if x[1] in r";{}" else " ") for x in self.value])
+        s = s.split("\n")
+        if len(s) > 10: s = s[:5] + ["..."] + s[-5:]
+        s = "\n | ".join(s)
+        s = " | alg ( " + " , ".join(self.args) + " ) " + s
+        env = [f" {k} = {str(to_tuple(self.env[k]))}" for k in self.env] + [""]
+        env = "\n |".join(env)
+        if len(env) : s += "\n | where\n |" + env
+        max_width = max([len(x) for x in s.split("\n")])
+        s = "\n".join([x + " "*(max_width+2-len(x)) + "|" for x in s.split("\n")])
+        s = "  " + "_"*max_width + "\n |" + " "*max_width + "|\n" + s + "\n |" + "_"*max_width + "|\n\n"
+        return s
+    def __str__(self):
+        s = "".join([x[1] + ("\n" if x[1] in r";{}" else " ") for x in self.value])
+        s = s.split("\n")
+        if len(s) > 10: s = s[:5] + ["..."] + s[-5:]
+        s = "\n".join(s)
+        s = "alg(" + ",".join(self.args) + ")" + s
+        env = [f"{k} is {str(to_tuple(self.env[k]))}" for k in self.env]
+        env = "\n".join(env)
+        if len(env) : s += "where\n" + env
+        return s + "\n"
+
+def SymbolsNeeded(node):
+    if isinstance(node,Id):return {node.name}
+    elif isinstance(node,Token):return set()
+    need = set()
+    for child in node.children:
+        need = need.union(SymbolsNeeded(child))
+    return need
 
 class UnOp(Node):
     name = "E?"
@@ -178,7 +242,24 @@ class Lis(UnOp):
     name = "Lis"
     opname = "list"
     def other(self):return CS0()
-    def op(self,x):return [None]*x
+    def op(self,x):
+        if isinstance(x,int):return [None]*x
+        if isinstance(x,list):return x
+        if isinstance(x,ndarray):return list(x)
+
+class Vec(UnOp):
+    name = "Vec"
+    opname = "vec"
+    def other(self):return CS0()
+    def op(self,x):
+        if x is None: raise ValueError("give the size of the array please")
+        if isinstance(x,int):return zeros(x)
+        if isinstance(x,list):return array(x)
+        if isinstance(x,ndarray):
+            x = tuple(x.astype("i"))
+            size = prod(x)
+            if size >1e6:raise ValueError(f"Cannot allocate memory for vector of shape {x}")
+            return zeros(x)
 
 class Neg(UnOp):
     name = "Neg"
@@ -446,6 +527,7 @@ class S1(Node):
         elif s[0][1] == "run":left = R()
         elif s[0][1] == "dict":left = D()
         elif s[0][1] == "return":left = Ret()
+        elif s[0][1] == "plot":left = Plot()
         else:left = A()
         left.parse(s[:-1])
         self.children = [left,right]
@@ -468,7 +550,9 @@ class A(Node):
                 assert len(right) > 0
                 Left = V()
                 if right[0][1] == "{":Right = F()
-                else:Right = Lis()
+                elif right[0][1] == "list":Right = Lis()
+                elif right[0][1] == "vec":Right = Vec()
+                else: Right = CS0()
                 Left.parse(left)
                 Right.parse(right)
                 Middle = Token("=")
@@ -498,11 +582,54 @@ class P(Node):
         Right.parse(s[1:])
         self.children = [Left,Right]
     def eval(self):
+        global to_tuple
         L = self.children
         n = len(L)
         assert n == 2
         x = L[1].eval()
+        x = to_tuple(x)
         print(x,end = "")
+
+class Plot(Node):
+    name:"plot"
+    def parse(self,s:list):
+        n = len(s)
+        assert n > 0
+        x = s[0]
+        assert x[1] == "plot"
+        Left = Token(x[1])
+        Right = CSV()
+        Right.parse(s[1:])
+        self.children = [Left,Right]
+    def eval(self):
+        global to_tuple
+        L = self.children
+        n = len(L)
+        assert n == 2
+        x = L[1].eval()
+        if x is None: print("\nNothing to plot\n")
+        elif not isinstance(x,list):print(f"\n{x} is a 0 dimensional object. This cannot be ploted\n")
+        elif not x:print(f"\nEmpty lists cannot be ploted\n")
+        elif len(x) > 2 and not isinstance(x[0],list):
+            try:
+                t = arange(len(x))
+                x = array(x)
+                f = plt.figure()
+                f.plot(t,x)
+                f.show()
+                del f
+            except:print("\nunable to plot\n")
+        elif len(x) > 2 : print("\nplotting in more than 2 dimensions is not possible yet\n")
+        elif not (isinstance(x[1],list) or isinstance(x[1],ndarray)):print("second argument should be a vector too")
+        elif len(x[0])!=len(x[1]):print("size mismatch")
+        else:
+            try:
+                x,y = x
+                f = plt.figure()
+                f.plot(x,y)
+                f.show()
+                del f
+            except:print("\nunable to plot\n")
 
 class R(Node):
     name:"R"
@@ -513,26 +640,41 @@ class R(Node):
         x = s[0]
         assert x[1] == "run"
         Left = Token(x[1])
-        Right = CS0()
-        Right.parse(s[1:])
-        self.children = [Left,Right]
+        for i in range(1,n):
+            x = s[i]
+            if x[1] == "with":
+                Fun = CS0()
+                Fun.parse(s[1:i])
+                Arg = CSV()
+                Arg.parse(s[i+1:])
+                self.children = [Left,Fun,Token("with"),Arg]
+                return
+        Fun = CS0()
+        Fun.parse(s[1:])
+        self.children = [Left,Fun]
     def eval(self):
         L = self.children
         n = len(L)
-        assert n == 2
-        f = L[1].eval()
+        assert n == 4 or n==2
+        Fun = L[1]
+        f = Fun.eval()
         assert isinstance(f,F)
+        if n==4:
+            Arg = L[3]
+            arg = Arg.eval()
+            if arg is None:arg = []
+            elif not isinstance(arg,list):arg = [arg]
+        else:
+            arg = []
         SYMBOLS = {
             "nl":"\n",
             "tab":"\t",
             "LASTCONDITION":None,
         }
         SYMBOLSTACK.append(SYMBOLS)
-        to_ret = f.eval()
+        to_ret = f.eval(arg)
         SYMBOLSTACK.pop()
-        del SYMBOLS
         SYMBOLS = SYMBOLSTACK[-1]
-        #return to_ret
 
 class Ret(Node):
     name:"Ret"
@@ -732,7 +874,14 @@ class E8(Node):
             assert s[-1][1] == ")",f"syntax error in {s}"
             Left =Token("(")
             Right =Token(")")
-            Middle = CS0()
+            Middle = CSV()
+            Middle.parse(s[1:-1])
+            self.children = [Left,Middle,Right]
+        elif s[0][1] == "[":
+            assert s[-1][1] == "]",f"syntax error in {s}"
+            Left =Token("[")
+            Right =Token("]")
+            Middle = CSV()
             Middle.parse(s[1:-1])
             self.children = [Left,Middle,Right]
         else:
@@ -743,7 +892,13 @@ class E8(Node):
         L = self.children
         assert L
         if len(L) == 1:return L[0].eval()
-        elif len(L) == 3:return L[1].eval()
+        elif len(L) == 3:
+            if L[0].value == "(":return L[1].eval()
+            elif L[0].value == "[":
+                x = L[1].eval()
+                if x is None:return array()
+                elif not isinstance(x,list):x = array([x])
+                return array(x)
 
 class E9(Node):
     name = "E9"
@@ -755,10 +910,11 @@ class E9(Node):
         if n == 1 and x[0] == "int": t = Int(x[1])
         elif n == 1 and x[0] == "float": t = Float(x[1])
         elif n == 1 and x[0] == "str": t = Str(x[1])
+        elif n == 1 and x[0] == "id": t = Id(x[1])
         elif x[1] == "alg":
             t = Al()
             t.parse(s)
-        elif s[0][0] == "id" and s[-1][1] == "}":
+        elif s[0][0] == "id" and s[1][1] == "(" and s[-1][1] == ")":
             t =FC()
             t.parse(s)
         else:
@@ -777,14 +933,86 @@ class Al(Node):
         n = len(s)
         assert n >= 3
         assert s[0][1] == "alg"
-        assert s[1][1] == "{"
+        assert s[1][1] == "("
         assert s[-1][1] == "}"
-        right = F()
-        right.parse(s[1:])
-        left = Token("alg")
-        self.children = [left,right]
+        try:
+            for i in range(2,n-1):
+                if s[i][1] == ")":
+                    right = F()
+                    right.parse(s[i+1:])
+                    left = Token("alg")
+                    middle = ENV()
+                    middle.parse(s[1:i+1])
+                    self.children = [left,middle,right]
+                    return
+        except:
+            raise ValueError("Algorithm definition failed")
     def eval(self):
-        return self.children[1]
+        global SymbolsNeeded,SYMBOLSTACK
+        kw,arg,f = self.children
+        arg = arg.eval()
+        assert isinstance(f,F)
+        f.args = tuple(arg)
+        S = SYMBOLSTACK[-1]
+        f.env = {k:S[k] for k in S if k in SymbolsNeeded(f)}
+        return f
+
+class ENV(Node):
+    name = "ENV"
+    def parse(self,s):
+        self.value = s
+        n = len(s)
+        assert s[0][1] == "("
+        assert s[-1][1] == ")"
+        var = True
+        children = [Token("(")]
+        for i in range(1,n-1):
+            if var:
+                assert s[i][0] == "id", "environement not parsed correctly"
+                child = Id(s[i][1])
+                children.append(child)
+                var = False
+            else:
+                assert s[i][1] == ",","environment not parsed correctly"
+                child = Token(",")
+                children.append(child)
+                var = True
+        children.append(Token(")"))
+        self.children = children
+    def eval(self):
+        return [child.value for child in self.children[1:-1:2]]
+
+class CSV(Node):
+    name = "CSV"
+    def parse(self,s):
+        self.value = s
+        n = len(s)
+        #assert s[0][1] == "("
+        #assert s[-1][1] == ")"
+        #children = [Token("(")]
+        children = []
+        stack = []
+        for i in range(0,n):
+            if s[i][1] != ",":
+                stack.append(s[i])
+            else:
+                try:
+                    child = CS0()
+                    child.parse(stack)
+                    children.append(child)
+                    children.append(Token(","))
+                    stack = []
+                except:stack.append(s[i])
+        if stack:
+            child = CS0()
+            child.parse(stack)
+            children.append(child)
+        #children.append(Token(")"))
+        self.children = children
+    def eval(self):
+        if len(self.children) == 0:return None
+        if len(self.children) == 1:return self.children[0].eval()
+        return  [x.eval() for x in self.children[::2]]
 
 class FC(Node):
     name = "FC"
@@ -793,31 +1021,34 @@ class FC(Node):
         n = len(s)
         assert n >= 3
         assert s[0][0] == "id"
-        assert s[1][1] == "{"
-        assert s[-1][1] == "}"
-        right = F()
-        right.parse(s[1:])
+        assert s[1][1] == "("
+        assert s[-1][1] == ")"
+        right = CSV()
+        right.parse(s[2:-1])
         left = Id(s[0][1])
-        self.children = [left,right]
+        self.children = [left,Token("("),right,Token(")")]
     def eval(self):
-        left,right = self.children
+        left,op,right,ed = self.children
         f = left.eval()
         assert isinstance(f,F)
-        assert isinstance(right,F)
+        assert isinstance(right,CSV)
         SYMBOLS = {
             "nl":"\n",
             "tab":"\t",
             "LASTCONDITION":None,
         }
         SYMBOLSTACK.append(SYMBOLS)
-        body1 = right.children[1]
-        body2 = f.children[1]
-        body1.eval()
-        to_ret = body2.eval()
+        #body1 = right.children[1]
+        #body2 = f.children[1]
+        #body1.eval()
+        #to_ret = body2.eval()
+        args = right.eval()
+        if args is None:args = []
+        elif not isinstance(args,list):args = [args]
+        to_ret = f.eval(args)
         SYMBOLSTACK.pop()
         del SYMBOLS
         return to_ret
-
 
 class V(Node):
     name = "V"
@@ -872,11 +1103,14 @@ SYMBOLSTACK = [SYMBOLS]
 
 if __name__ == "__main__":
     #s = open("sample2.txt").read()
+    E0().parse([('id', 'x'), ('op1', '+'), ('id', 'y'), ('op1', '+'), ('id', 'z')])
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("file")
+    parser.add_argument("vis")
     args = parser.parse_args()
     file = args.file
+    vis = args.vis
     s = open(file).read()
     print("Program:")
     print("-"*50)
@@ -890,3 +1124,6 @@ if __name__ == "__main__":
     s0.eval()
     print("\n\n" + "-"*50)
     print("Program Finished")
+    if vis == "True":
+        s0.PlotTree()
+        Graph.render(file + ".png",format='png',view=True)
