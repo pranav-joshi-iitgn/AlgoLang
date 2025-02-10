@@ -182,12 +182,18 @@ class F(Node):
         if len(s) > 10: s = s[:5] + ["..."] + s[-5:]
         s = "\n | ".join(s)
         s = " | alg ( " + " , ".join(self.args) + " ) " + s
-        env = [f" {k} = {str(to_tuple(self.env[k]))}" for k in self.env] + [""]
+        env = [f" {k} = {to_tuple(self.env[k]).__repr__()}" for k in self.env] + [""]
         env = "\n |".join(env)
         if len(env) : s += "\n | where\n |" + env
         max_width = max([len(x) for x in s.split("\n")])
         s = "\n".join([x + " "*(max_width+2-len(x)) + "|" for x in s.split("\n")])
         s = "  " + "_"*max_width + "\n |" + " "*max_width + "|\n" + s + "\n |" + "_"*max_width + "|\n\n"
+        return s
+    def __repr__(self):
+        s = self.value
+        if len(s) > 10: s = s[:5] + [(""," ... ")]+ s[-5:]
+        s = "".join([(" " if x[0] != "brak" else "") + x[1] for x in s])
+        s = "alg(" + ",".join(self.args) + ")" + s
         return s
     def __str__(self):
         s = "".join([x[1] + ("\n" if x[1] in r";{}" else " ") for x in self.value])
@@ -588,6 +594,7 @@ class P(Node):
         assert n == 2
         x = L[1].eval()
         x = to_tuple(x)
+        if isinstance(x,F):x = x.prepr()
         print(x,end = "")
 
 class Plot(Node):
