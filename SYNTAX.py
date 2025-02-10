@@ -661,7 +661,7 @@ class R(Node):
         assert isinstance(f,F)
         if n==4:
             Arg = L[3]
-            arg = Arg.eval()
+            arg = Arg.eval(True)
             if arg is None:arg = []
             elif not isinstance(arg,list):arg = [arg]
         else:
@@ -1009,9 +1009,9 @@ class CSV(Node):
             children.append(child)
         #children.append(Token(")"))
         self.children = children
-    def eval(self):
-        if len(self.children) == 0:return None
-        if len(self.children) == 1:return self.children[0].eval()
+    def eval(self,wrap=False):
+        if not wrap and len(self.children) == 0:return None
+        if not wrap and len(self.children) == 1:return self.children[0].eval()
         return  [x.eval() for x in self.children[::2]]
 
 class FC(Node):
@@ -1042,7 +1042,7 @@ class FC(Node):
         #body2 = f.children[1]
         #body1.eval()
         #to_ret = body2.eval()
-        args = right.eval()
+        args = right.eval(True)
         if args is None:args = []
         elif not isinstance(args,list):args = [args]
         to_ret = f.eval(args)
