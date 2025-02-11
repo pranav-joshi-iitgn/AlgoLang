@@ -1,5 +1,5 @@
 digits = "0123456789"
-alphas = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+alphas = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 dot = "."
 brak = r"()[]{};,"
 op1 = "+-<>*/"
@@ -10,9 +10,20 @@ spaces = " \t"
 comS = "#"
 newline = "\n\r"
 
-keywords = ["while","if",'else','elif','type','in','and','or','not','True','False',"None","print",'run','list','return','alg','with','vec','plot']
+keywords = [
+    "while","if",'else','elif',
+    'type','in','and','or','not',
+    'True','False',"None","print",
+    'run','list','return','alg',
+    'with','vec','plot','break',
+    'continue','mod','div'
+]
 
-chartypes = [digits,alphas,dot,brak,op1,op2,equal,quotes,spaces,newline,comS]
+chartypes = [
+    digits,alphas,dot,brak,
+    op1,op2,equal,quotes,
+    spaces,newline,comS
+]
 
 def get_char_type(c):
     global chartypes
@@ -88,7 +99,7 @@ def remove_comments(s:str):
 
 COLOR = {
     "id":"\x1b[38;2;100;200;255m",#blue
-    "str":"\x1b[38;2;255;0;0m",#red
+    "str":"\x1b[38;2;170;50;50m",#red
     "int":"\x1b[38;2;0;255;0m",#green
     "float":"\x1b[38;2;0;255;0m",#green
     "kw":"\x1b[38;2;255;170;170m",#pink
@@ -111,14 +122,25 @@ def HighLight(s):
     colored = "".join(colored)
     return colored
 
+def TokensToStr(tokens,color=False):
+    if len(tokens) > 10: tokens = tokens[:5] + [("","\n.....\n")]+  tokens[-5:]
+    if not color :return " ".join([x[1] for x in tokens])
+    colored = []
+    for x in tokens:
+        t = x[1]
+        if x[0] in COLOR: t= COLOR[x[0]] + t
+        else: t= "\x1b[0m" + t
+        colored.append(t)
+    colored.append("\x1b[0m")
+    colored = " ".join(colored)
+    return colored
 
 if __name__ == "__main__":
-    s = open("sample2.txt").read()
-    #print(lex(s))
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file")
+    args = parser.parse_args()
+    file = args.file
+    s = open(file).read()
     col_s = HighLight(s)
     print(col_s)
-    #file = open("colored.txt",'w')
-    #file.write(col_s)
-    #file.close()
-
-    #print(" , ".join([f"[{x[0]}]({repr(x[1])})" for x in tokens]))
