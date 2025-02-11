@@ -3,46 +3,11 @@ from graphviz import Digraph
 from ast import literal_eval
 import termplotlib as plt
 from numpy import *
-"""
-BODMAS
-The grammar for this language is ..
-S0 -> S1 S0 | W S0 | I S0 | ""
-W -> while CS0 F
-I -> if CS0 F
-S1 -> P; | A; | R; | D;
-P -> print CS0
-R -> run id | run CS0 with CSV
-Ret -> return CS0
-A -> V = CS0 | V = F
-F -> { S0 }
 
-CS0 -> CS1 or CS0 | CS1
-CS1 -> CS2 and CS1 | CS2
-CS2 -> not C0
-
-C0 -> C1 == C0 | C1
-C1 -> C2 > C1 | C2
-C2 -> C3 < C2 | C3
-C3 -> C4 >= C3 | C4
-C4 -> C5 <= C4 | C5
-C5 -> E0 != C5 | E0
-
-E0 -> E2 - E0 | E2 + E1 | E2
-E2 -> E3 * E2 | E3
-E3 -> E3 / E4 | E4
-E4 -> E4 ** E5 | E5
-E5 -> E5 // E6 | E6
-E6 -> E6 % E7 | E7
-E7 -> - E8 | E8
-E8 -> (CS0) | E9
-E9 -> int | float | str | V | Al
-V -> id [ E0 ] | id
-Al -> alg (CSV) F | alg F
-CSV -> id,CSV | id
-
-"""
 Graph = Digraph("AST")
 cur_node = 0
+DEBUG_WITH_COLOR = False
+TESTING = False
 
 def to_tuple(L):
     if isinstance(L,list) or isinstance(L,tuple):
@@ -137,11 +102,13 @@ class F(Node):
     def parse(self,s:list):
         self.value = s
         n = len(s)
-        assert n >= 2
-        assert s[0][1] == "{"
-        assert s[-1][1] == "}"
+        on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
+        if not n >= 2:return ValueError(self.name + " : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        if not s[0][1] == "{":return ValueError(self.name + " : body should start with '{': \n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        if not s[-1][1] == "}":return ValueError(self.name + " : missing closing '}': \n" + TokensToStr(s,DEBUG_WITH_COLOR))
         body = S0()
-        body.parse(s[1:-1])
+        res = body.parse(s[1:-1])
+        if isinstance(res,ValueError):return res
         self.children = [Token("{"),body,Token("}")]
     def eval(self,argvals=[]):
         if len(argvals) > len(self.args):raise ValueError("Too many values in function call")
@@ -281,6 +248,7 @@ class BinOp(Node):
     left_associative = True
     def parse(self,s:list):
         self.value = s
+        on_wrong = f"syntax error for operation {self.op} \n" + TokensToStr(s,DEBUG_WITH_COLOR)
         good =  False
         for i in range(len(s)):
             if s[i][1] == self.opname:
@@ -355,42 +323,55 @@ class S0(Node):
     name = "S0"
     def parse(self,s:list):
         n = len(s)
+        last_err = None
         if n == 0:self.children =[]
         elif s[0][1] in ["while","if",'elif','else']:
+            on_wrong = self.name + " : syntax error in:\n" + TokensToStr(s,DEBUG_WITH_COLOR)
             for i in range(1,n):
                 if s[i][1] == "}":
-                    try:
-                        left = s[:i+1]
-                        right = s[i+1:]
-                        if s[0][1] == "while":Left = W()
-                        elif s[0][1] == "elif":Left = EI()
-                        elif s[0][1] == "else":Left = EI1()
-                        elif s[0][1] == "if":Left = I()
-                        else:
-                            raise ValueError("This isn't allowed")
-                        Right = S0()
-                        Left.parse(left)
-                        Right.parse(right)
-                        self.children = [Left,Right]
-                        break
-                    except:pass
+                    left = s[:i+1]
+                    right = s[i+1:]
+                    if s[0][1] == "while":Left = W()
+                    elif s[0][1] == "elif":Left = EI()
+                    elif s[0][1] == "else":Left = EI1()
+                    elif s[0][1] == "if":Left = I()
+                    else:continue
+                    Right = S0()
+                    res = Left.parse(left)
+                    if isinstance(res,ValueError):
+                        last_err = res
+                        continue
+                    res = Right.parse(right)
+                    if isinstance(res,ValueError):
+                        return ValueError(on_wrong,res)
+                    #except:continue
+                    self.children = [Left,Right]
+                    break
             else:
-                raise ValueError(f"syntax error in {s}")
+                if last_err is not None: return ValueError(on_wrong,last_err)
+                return ValueError(on_wrong)
         else:
+            on_wrong = self.name + " : syntax error in:\n" + TokensToStr(s,DEBUG_WITH_COLOR)
             for i in range(n):
                 if s[i][1] == ";":
-                    try:
-                        left = s[:i+1]
-                        right = s[i+1:]
-                        Left = S1()
-                        Right = S0()
-                        Left.parse(left)
-                        Right.parse(right)
-                        self.children = [Left,Right]
-                        break
-                    except:pass
+                    left = s[:i+1]
+                    right = s[i+1:]
+                    Left = S1()
+                    Right = S0()
+                    try:res = Left.parse(left)
+                    except:continue
+                    if isinstance(res,ValueError):
+                        last_err = res
+                        continue
+                    try:res = Right.parse(right)
+                    except:continue
+                    if isinstance(res,ValueError):
+                        return ValueError(on_wrong,res)
+                    self.children = [Left,Right]
+                    break
             else:
-                raise ValueError(f"syntax error in {s}")
+                if last_err is not None: return ValueError(on_wrong,last_err)
+                return ValueError(on_wrong)
     def eval(self):
         for child in self.children:
             x = child.eval()
@@ -400,58 +381,99 @@ class W(Node):
     name = "W"
     def parse(self,s:list):
         n = len(s)
-        assert n > 0
-        assert s[0][1] == "while"
-        assert s[-1][1] == "}"
+        on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
+        if not n > 0                :return ValueError(on_wrong)
+        if not s[0][1] == "while"   :return ValueError(on_wrong)
+        if not s[-1][1] == "}"      :return ValueError(on_wrong)
+        last_err = None
         for i in range(1,n):
             if s[i][1] == '{':
-                try:
-                    condition =s[1:i]
-                    code = s[i:]
-                    cs0 = CS0()
-                    f = F()
-                    cs0.parse(condition)
-                    f.parse(code)
-                    self.children = [Token('while'),cs0,f]
-                    break
-                except:pass
-        else:raise ValueError(f"syntax error in {s}")
+                condition =s[1:i]
+                code = s[i:]
+                cs0 = CS0()
+                f = F()
+                try:res = cs0.parse(condition)
+                except:continue
+                if isinstance(res,ValueError):
+                    last_err = res
+                    continue
+                try:res = f.parse(code)
+                except:continue
+                if isinstance(res,ValueError):
+                    last_err = res
+                    continue
+                self.children = [Token('while'),cs0,f]
+                break
+        else:
+            if last_err is not None: return ValueError(on_wrong,last_err)
+            return ValueError(on_wrong)
     def eval(self):
         L = self.children
         assert len(L) == 3
-        #while
         condition = L[1]
         code = L[2]
         br =10**9
         SYMBOLS = SYMBOLSTACK[-1]
-        SYMBOLS["LASTCONDITION"] = False
         while condition.eval() and br > 0:
-            SYMBOLS["LASTCONDITION"] = True
             x = code.eval()
+            if isinstance(x,Brk):
+                SYMBOLS["LASTCONDITION"] = True
+                break
+            if isinstance(x,Cont):continue
             if x is not None:return x
             br -= 1
+        else:SYMBOLS["LASTCONDITION"] = False
         if br <= 0 : print("broken while because it took over 10^9 loops")
+
+class Brk(Node):
+    def parse(self,s:list):
+        n = len(s)
+        if not n == 1:return ValueError("break statements only have the `break` keyword:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        if not s[0][1] == "break":return ValueError("break statements start with `break`:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        self.children = [Token("break")]
+    def eval(self):
+        return self
+
+class Cont(Node):
+    def parse(self,s:list):
+        n = len(s)
+        if not n == 1:return ValueError("continue statements only have the `continue` keyword:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        if not s[0][1] == "continue":return ValueError("continue statements start with `continue`:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        self.children = [Token("continue")]
+    def eval(self):
+        return self
+
 
 class I(Node):
     name = "I"
     def parse(self,s:list):
         n = len(s)
-        assert n > 0
-        assert s[0][1] == "if"
-        assert s[-1][1] == "}"
+        on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
+        if not n > 0            :return ValueError(on_wrong)
+        if not s[0][1] == "if"  :return ValueError(on_wrong)
+        if not s[-1][1] == "}"  :return ValueError(on_wrong)
+        last_err = None
         for i in range(1,n):
             if s[i][1] == '{':
-                try:
-                    condition =s[1:i]
-                    code = s[i+1:-1]
-                    cs0 = CS0()
-                    s0 = S0()
-                    cs0.parse(condition)
-                    s0.parse(code)
-                    self.children = [Token('if'),cs0,Token("{"),s0,Token("}")]
-                    break
-                except:pass
-        else:raise ValueError(f"syntax error in {s}")
+                condition =s[1:i]
+                code = s[i+1:-1]
+                cs0 = CS0()
+                s0 = S0()
+                try:res = cs0.parse(condition)
+                except:continue
+                if isinstance(res,ValueError):
+                    last_err = res
+                    continue
+                res = s0.parse(code)
+                if isinstance(res,ValueError):
+                    #last_err = res
+                    #continue
+                    return ValueError(on_wrong,res)
+                self.children = [Token('if'),cs0,Token("{"),s0,Token("}")]
+                break
+        else:
+            if last_err is not None: return ValueError(on_wrong,last_err)
+            return ValueError(on_wrong)
     def eval(self):
         L = self.children
         assert len(L) == 5
@@ -460,43 +482,55 @@ class I(Node):
         SYMBOLS = SYMBOLSTACK[-1]
         cond = condition.eval()
         if cond:
+            to_ret = code.eval()
             SYMBOLS["LASTCONDITION"] =True
-            return code.eval()
-        else:
-            SYMBOLS["LASTCONDITION"] =False
+            return to_ret
+        else:SYMBOLS["LASTCONDITION"] =False
 
 class EI(Node):
     name = "EI"
     def parse(self,s:list):
         n = len(s)
-        assert n > 0
-        assert s[0][1] == "elif"
-        assert s[-1][1] == "}"
+        on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
+        if not n > 0            :return ValueError(on_wrong)
+        if not s[0][1] == "elif":return ValueError(on_wrong)
+        if not s[-1][1] == "}"  :return ValueError(on_wrong)
+        last_err = None
         for i in range(1,n):
             if s[i][1] == '{':
-                try:
-                    condition =s[1:i]
-                    code = s[i+1:-1]
-                    cs0 = CS0()
-                    s0 = S0()
-                    cs0.parse(condition)
-                    s0.parse(code)
-                    self.children = [Token('elif'),cs0,Token("{"),s0,Token("}")]
-                    break
-                except:pass
-        else:raise ValueError(f"syntax error in {s}")
+                condition =s[1:i]
+                code = s[i+1:-1]
+                cs0 = CS0()
+                s0 = S0()
+                try:res = cs0.parse(condition)
+                except:continue
+                if isinstance(res,ValueError):
+                    last_err = res
+                    continue
+                try:res=s0.parse(code)
+                except:continue
+                if isinstance(res,ValueError):
+                    #last_err = res
+                    #continue
+                    return ValueError(on_wrong,res)
+                self.children = [Token('elif'),cs0,Token("{"),s0,Token("}")]
+                break
+        else:
+            if last_err is not None: return ValueError(on_wrong,last_err)
+            return ValueError(on_wrong)
     def eval(self):
         L = self.children
         assert len(L) == 5
         condition = L[1]
         code = L[3]
         SYMBOLS = SYMBOLSTACK[-1]
-        assert SYMBOLS["LASTCONDITION"] is not None,"elif must have a while or if before it"
+        #assert SYMBOLS["LASTCONDITION"] is not None,"elif must have a while or if before it"
         if SYMBOLS["LASTCONDITION"]:return
         cond = condition.eval()
         if cond:
+            to_ret = code.eval()
             SYMBOLS["LASTCONDITION"] =True
-            return code.eval()
+            return to_ret
         else:
             SYMBOLS["LASTCONDITION"] =False
 
@@ -504,20 +538,25 @@ class EI1(Node):
     name = "EI1"
     def parse(self,s:list):
         n = len(s)
-        assert n >= 3
-        assert s[0][1] == "else"
-        assert s[-1][1] == "}"
-        assert s[1][1] == "{"
+        on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
+        if not n >= 3           :return ValueError(on_wrong)
+        if not s[0][1] == "else":return ValueError(on_wrong)
+        if not s[-1][1] == "}"  :return ValueError(on_wrong)
+        if not s[1][1] == "{"   :return ValueError(on_wrong)
         code = F()
-        code.parse(s[1:])
+        try:res = code.parse(s[1:])
+        except:return ValueError(on_wrong)
+        if isinstance(res,ValueError):
+            return ValueError(on_wrong,res)
         self.children = [Token('else'),code]
     def eval(self):
         L = self.children
         assert len(L) == 2
         code = L[1]
         SYMBOLS = SYMBOLSTACK[-1]
-        assert SYMBOLS["LASTCONDITION"] is not None,"else must have a while or if before it"
+        #assert SYMBOLS["LASTCONDITION"] is not None,"else must have a while or if before it"
         if SYMBOLS["LASTCONDITION"]:return
+        SYMBOLS["LASTCONDITION"] = True
         return code.eval()
 
 
@@ -525,17 +564,22 @@ class S1(Node):
     name = "S1"
     def parse(self,s:list):
         n =len(s)
+        on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
         self.value = s
-        assert n > 1
-        assert s[-1][1] == ";"
+        if not n > 1:return ValueError(on_wrong)
+        if not s[-1][1] == ";":return ValueError(on_wrong)
         right = Token(";")
         if s[0][1] == "print":left = P()
         elif s[0][1] == "run":left = R()
         elif s[0][1] == "dict":left = D()
         elif s[0][1] == "return":left = Ret()
         elif s[0][1] == "plot":left = Plot()
+        elif s[0][1] == "break":left = Brk()
+        elif s[0][1] == "continue":left = Cont()
         else:left = A()
-        left.parse(s[:-1])
+        try:res = left.parse(s[:-1])
+        except:return ValueError(on_wrong)
+        if isinstance(res,ValueError):return ValueError(on_wrong,res)
         self.children = [left,right]
     def eval(self):
         L = self.children
@@ -548,23 +592,28 @@ class A(Node):
     left_associative =False
     def parse(self,s:list):
         n = len(s)
+        on_wrong = "incorrect assignment:\n" + TokensToStr(s,DEBUG_WITH_COLOR)
         for i in range(n):
             if s[i][1] == "=":
                 left = s[:i]
                 right = s[i+1:]
-                assert len(left) > 0
-                assert len(right) > 0
+                if not len(left) > 0 : return ValueError("LHS is empty:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+                if not len(right) > 0 : return ValueError("RHS is empty:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
                 Left = V()
                 if right[0][1] == "{":Right = F()
                 elif right[0][1] == "list":Right = Lis()
                 elif right[0][1] == "vec":Right = Vec()
                 else: Right = CS0()
-                Left.parse(left)
-                Right.parse(right)
+                try:res = Left.parse(left)
+                except:return ValueError(on_wrong)
+                if isinstance(res,ValueError):return ValueError(on_wrong,res)
+                try:res = Right.parse(right)
+                except:return ValueError(on_wrong)
+                if isinstance(res,ValueError):return ValueError(on_wrong,res)
                 Middle = Token("=")
                 self.children = [Left,Middle,Right]
                 break
-        else:raise ValueError("Not an assignment")
+        else:return ValueError(on_wrong)
     def eval(self):
         L = self.children
         n = len(L)
@@ -580,36 +629,43 @@ class P(Node):
     name:"P"
     def parse(self,s:list):
         n = len(s)
+        on_wrong = f"incorrect print statement: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
         assert n > 0
         x = s[0]
         assert x[1] == "print"
         Left = Token(x[1])
         Right = CS0()
-        Right.parse(s[1:])
+        try:res = Right.parse(s[1:])
+        except:return ValueError(on_wrong)
+        if isinstance(res,ValueError):return ValueError(on_wrong,res)
         self.children = [Left,Right]
     def eval(self):
-        global to_tuple
+        global to_tuple,TESTING
         L = self.children
         n = len(L)
         assert n == 2
         x = L[1].eval()
         x = to_tuple(x)
         if isinstance(x,F):x = x.prepr()
-        print(x,end = "")
+        if not TESTING:print(x,end = "")
 
 class Plot(Node):
     name:"plot"
     def parse(self,s:list):
         n = len(s)
+        on_wrong = "incorrect plot statement: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
         assert n > 0
         x = s[0]
         assert x[1] == "plot"
         Left = Token(x[1])
         Right = CSV()
-        Right.parse(s[1:])
+        try:res = Right.parse(s[1:])
+        except:return ValueError(on_wrong)
+        if isinstance(res,ValueError):return ValueError(on_wrong,res)
         self.children = [Left,Right]
     def eval(self):
-        global to_tuple
+        global to_tuple,TESTING
+        if TESTING:return
         L = self.children
         n = len(L)
         assert n == 2
@@ -633,7 +689,7 @@ class Plot(Node):
             try:
                 x,y = x
                 f = plt.figure()
-                f.plot(x,y)
+                f.plot(x,y,width=50,height=20)
                 f.show()
                 del f
             except:print("\nunable to plot\n")
@@ -642,6 +698,7 @@ class R(Node):
     name:"R"
     def parse(self,s:list):
         self.value = s
+        on_wrong = "incorrect run statement :\n" + TokensToStr(s,DEBUG_WITH_COLOR)
         n = len(s)
         assert n > 0
         x = s[0]
@@ -651,13 +708,19 @@ class R(Node):
             x = s[i]
             if x[1] == "with":
                 Fun = CS0()
-                Fun.parse(s[1:i])
                 Arg = CSV()
-                Arg.parse(s[i+1:])
+                try:res= Fun.parse(s[1:i])
+                except:return ValueError(on_wrong)
+                if isinstance(res,ValueError):return ValueError(on_wrong,res)
+                try:res= Arg.parse(s[i+1:])
+                except:return ValueError(on_wrong)
+                if isinstance(res,ValueError):return ValueError(on_wrong,res)
                 self.children = [Left,Fun,Token("with"),Arg]
                 return
         Fun = CS0()
-        Fun.parse(s[1:])
+        try:res= Fun.parse(s[1:])
+        except:return ValueError(on_wrong)
+        if isinstance(res,ValueError):return ValueError(on_wrong,res)
         self.children = [Left,Fun]
     def eval(self):
         L = self.children
@@ -676,7 +739,7 @@ class R(Node):
         SYMBOLS = {
             "nl":"\n",
             "tab":"\t",
-            "LASTCONDITION":None,
+            "LASTCONDITION":True,
         }
         SYMBOLSTACK.append(SYMBOLS)
         to_ret = f.eval(arg)
@@ -687,13 +750,16 @@ class Ret(Node):
     name:"Ret"
     def parse(self,s:list):
         self.value = s
+        on_wrong = "incorrect return statement :\n" + TokensToStr(s,DEBUG_WITH_COLOR)
         n = len(s)
         assert n > 0
         x = s[0]
         assert x[1] == "return"
         Left = Token(x[1])
         Right = CS0()
-        Right.parse(s[1:])
+        try:res = Right.parse(s[1:])
+        except:return ValueError(on_wrong)
+        if isinstance(res,ValueError):return ValueError(on_wrong,res)
         self.children = [Left,Right]
     def eval(self):
         L = self.children
@@ -705,13 +771,16 @@ class D(Node):
     name:"D"
     def parse(self,s:list):
         self.value = s
+        on_wrong = "incorrect dictionary initialisation :\n" + TokensToStr(s,DEBUG_WITH_COLOR)
         n = len(s)
         assert n > 0
         x = s[0]
         assert x[1] == "dict"
         Left = Token(x[1])
         Right = V()
-        Right.parse(s[1:])
+        try:res = Right.parse(s[1:])
+        except:return ValueError(on_wrong)
+        if isinstance(res,ValueError):return ValueError(on_wrong,res)
         self.children = [Left,Right]
     def eval(self):
         L = self.children
@@ -740,78 +809,99 @@ class CS1(BinOp):
     def other(self):return CS2()
     def op(self,x,y):return x and y
 
-class CS2(Node):
+# class CS2(Node):
+#     name = "CS2"
+#     def parse(self,s:list):
+#         self.value = s
+#         n = len(s)
+#         assert n > 0
+#         x = s[0]
+#         if x[1] == "not":
+#             left = Token("not")
+#             right = C0()
+#             right.parse(s[1:])
+#             self.children = [left,right]
+#         else:
+#             child = C0()
+#             child.parse(s)
+#             self.children = [child]
+#     def eval(self):
+#         L = self.children
+#         n = len(L)
+#         if n == 1:return L[0].eval()
+#         elif n == 2:return not L[1].eval()
+
+class CS2(UnOp):
     name = "CS2"
-    def parse(self,s:list):
-        self.value = s
-        n = len(s)
-        assert n > 0
-        x = s[0]
-        if x[1] == "not":
-            left = Token("not")
-            right = C0()
-            right.parse(s[1:])
-            self.children = [left,right]
-        else:
-            child = C0()
-            child.parse(s)
-            self.children = [child]
-    def eval(self):
-        L = self.children
-        n = len(L)
-        if n == 1:return L[0].eval()
-        elif n == 2:return L[1].eval()
+    opname = "not"
+    def other(self):return C0()
+    def op(self,x):return not x
 
 """
-C0 -> C1 == C0 | C1
-C1 -> C2 > C1 | C2
-C2 -> C3 < C2 | C3
-C3 -> C4 >= C3 | C4
-C4 -> C5 <= C4 | C5
-C5 -> E0 != C5 | E0
+C0 -> E0 == C0
+C0 -> E0 >  C0
+C0 -> E0 <  C0
+C0 -> E0 >= C0
+C0 -> E0 <= C0
+C0 -> E0 != C0
 """
 
-class C0(BinOp):
-    name = "C0"
-    opname = "=="
+class C0(MultiBinOp):
+    name = "E0"
+    opnames = ["==",">","<",">=","<=","!="]
+    left_associative = True
     def duplicate(self):return C0()
-    def other(self):return C1()
-    def op(self,x,y):return x == y
-
-class C1(BinOp):
-    name = "C1"
-    opname = ">"
-    def duplicate(self):return C1()
-    def other(self):return C2()
-    def op(self,x,y):return x > y
-
-class C2(BinOp):
-    name = "C2"
-    opname = "<"
-    def duplicate(self):return C2()
-    def other(self):return C3()
-    def op(self,x,y):return x < y
-
-class C3(BinOp):
-    name = "C3"
-    opname = ">="
-    def duplicate(self):return C3()
-    def other(self):return C4()
-    def op(self,x,y):return x >= y
-
-class C4(BinOp):
-    name = "C4"
-    opname = "<="
-    def duplicate(self):return C4()
-    def other(self):return C5()
-    def op(self,x,y):return x <= y
-
-class C5(BinOp):
-    name = "C5"
-    opname = "!="
-    def duplicate(self):return C5()
     def other(self):return E0()
-    def op(self,x,y):return x != y
+    def op(self,x,y,operation):
+        if operation == "==" : return x == y
+        if operation == ">" : return x > y
+        if operation == "<" : return x < y
+        if operation == ">=" : return x >= y
+        if operation == "<=" : return x <= y
+        if operation == "!=" : return x != y
+        else:raise ValueError(f"unrecognised binary operation {operation}")
+
+# class C0(BinOp):
+#     name = "C0"
+#     opname = "=="
+#     def duplicate(self):return C0()
+#     def other(self):return C1()
+#     def op(self,x,y):return x == y
+
+# class C1(BinOp):
+#     name = "C1"
+#     opname = ">"
+#     def duplicate(self):return C1()
+#     def other(self):return C2()
+#     def op(self,x,y):return x > y
+
+# class C2(BinOp):
+#     name = "C2"
+#     opname = "<"
+#     def duplicate(self):return C2()
+#     def other(self):return C3()
+#     def op(self,x,y):return x < y
+
+# class C3(BinOp):
+#     name = "C3"
+#     opname = ">="
+#     def duplicate(self):return C3()
+#     def other(self):return C4()
+#     def op(self,x,y):return x >= y
+
+# class C4(BinOp):
+#     name = "C4"
+#     opname = "<="
+#     def duplicate(self):return C4()
+#     def other(self):return C5()
+#     def op(self,x,y):return x <= y
+
+# class C5(BinOp):
+#     name = "C5"
+#     opname = "!="
+#     def duplicate(self):return C5()
+#     def other(self):return E0()
+#     def op(self,x,y):return x != y
 
 class E0(MultiBinOp):
     name = "E0"
@@ -825,45 +915,63 @@ class E0(MultiBinOp):
         else:
             print("This is not good")
 
-class E2(BinOp):
-    name = "E2"
-    opname = "*"
+#class E2(BinOp):
+#    name = "E2"
+#    opname = "*"
+#    left_associative = True
+#    def duplicate(self):return E2()
+#    def other(self):return E3()
+#    def op(self,x,y):return x*y
+
+
+class E2(MultiBinOp):
+    name = "E0"
+    opnames = ["*","/","//","%","mod","div"]
     left_associative = True
     def duplicate(self):return E2()
-    def other(self):return E3()
-    def op(self,x,y):return x*y
-
-class E3(BinOp):
-    name = "E3"
-    opname = "/"
-    left_associative = True
-    def duplicate(self):return E3()
     def other(self):return E4()
-    def op(self,x,y):return x/y
+    def op(self,x,y,operation):
+        if operation == "*" : return x*y
+        if operation == "/" : return x/y
+        if operation == "//" : return x//y
+        if operation == "%" : return x%y
+        if operation == "div" : return x//y
+        if operation == "mod" : return x%y
+        else:
+            raise ValueError(f"unrecognised binary operation {operation}")
+
+
+#class E3(BinOp):
+#    name = "E3"
+#    opname = "/"
+#    left_associative = True
+#    def duplicate(self):return E3()
+#    def other(self):return E4()
+#    def op(self,x,y):return x/y
 
 class E4(BinOp):
     name = "E4"
     opname = "**"
     left_associative =False
     def duplicate(self):return E4()
-    def other(self):return E5()
+    def other(self):return E7()
     def op(self,x,y):return x ** y
 
-class E5(BinOp):
-    name = "E5"
-    opname = "//"
-    left_associative =False
-    def duplicate(self):return E5()
-    def other(self):return E6()
-    def op(self,x,y):return x // y
+#class E5(BinOp):
+#    name = "E5"
+#    opname = "//"
+#    left_associative =True
+#    def duplicate(self):return E5()
+#    def other(self):return E6()
+#    def op(self,x,y):return x // y
 
-class E6(BinOp):
-    name = "E6"
-    opname = "%"
-    left_associative =False
-    def duplicate(self):return E6()
-    def other(self):return E7()
-    def op(self,x,y):return x % y
+#class E6(BinOp):
+#    name = "E6"
+#    opname = "%"
+#    left_associative =True
+#    def duplicate(self):return E6()
+#    def other(self):return E7()
+#    def op(self,x,y):return x % y
 
 class E7(UnOp):
     name = "E7"
@@ -946,7 +1054,8 @@ class Al(Node):
             for i in range(2,n-1):
                 if s[i][1] == ")":
                     right = F()
-                    right.parse(s[i+1:])
+                    res = right.parse(s[i+1:])
+                    if isinstance(res,ValueError):raise ValueError("Function body wasn't parsed")
                     left = Token("alg")
                     middle = ENV()
                     middle.parse(s[1:i+1])
@@ -1042,7 +1151,7 @@ class FC(Node):
         SYMBOLS = {
             "nl":"\n",
             "tab":"\t",
-            "LASTCONDITION":None,
+            "LASTCONDITION":True,
         }
         SYMBOLSTACK.append(SYMBOLS)
         #body1 = right.children[1]
@@ -1103,14 +1212,24 @@ class V(Node):
 SYMBOLS = {
     "nl":"\n",
     "tab":"\t",
-    "LASTCONDITION":None,
+    "LASTCONDITION":True,
 }
 
 SYMBOLSTACK = [SYMBOLS]
 
+def PrintError(Err):
+    assert isinstance(Err,ValueError),"Not an error"
+    args = Err.args
+    if len(args) == 1:
+        print(args[0],"\n")
+        return
+    m,Err = args
+    print(m,"\n")
+    PrintError(Err)
+
+
+
 if __name__ == "__main__":
-    #s = open("sample2.txt").read()
-    E0().parse([('id', 'x'), ('op1', '+'), ('id', 'y'), ('op1', '+'), ('id', 'z')])
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("file")
@@ -1119,18 +1238,30 @@ if __name__ == "__main__":
     file = args.file
     vis = args.vis
     s = open(file).read()
-    print("Program:")
-    print("-"*50)
-    print(HighLight(s))
-    print("-"*50)
+    print("_"*50 + "\n")
+    print("Program")
+    print("_"*50 + "\n")
+    if DEBUG_WITH_COLOR:print(HighLight(s))
+    else:print(TokensToStr(lex(s,True,True),color =False))
+    print("_"*50 + "\n")
     s = lex(s)
     s0 = S0()
-    s0.parse(s)
-    print("Output:")
-    print("-"*50)
-    s0.eval()
-    print("\n\n" + "-"*50)
-    print("Program Finished")
-    if vis == "True":
-        s0.PlotTree()
-        Graph.render(file + ".png",format='png',view=True)
+    res = s0.parse(s)
+    if isinstance(res,ValueError):
+        if DEBUG_WITH_COLOR:print("\x1b[38;2;255;0;0mCompilation Error\x1b[0m")
+        else:print("Compilation Error")
+        print("_"*50 + "\n")
+        PrintError(res)
+    else:
+        if DEBUG_WITH_COLOR:print("\x1b[38;2;0;0;255mOutput\x1b[0m")
+        else:print("Output:")
+        print("_"*50 + "\n")
+        res = s0.eval()
+        if isinstance(res,ValueError):PrintError(res)
+        print("\n\n" + "_"*50 + "\n")
+        #if DEBUG_WITH_COLOR:print("\x1b[38;2;0;255;0mFinished\x1b[0m")
+        #else:print("Finished")
+        #print("_"*50 + "\n")
+        if vis == "True":
+            s0.PlotTree()
+            Graph.render(file + ".png",format='png',view=True)
