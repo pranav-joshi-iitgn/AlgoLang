@@ -1,0 +1,17 @@
+x = 1;
+if(0){}
+else{ print x + 1;print nl;} # sets Last condition to be evaluated to True
+else{print x;} # only executes if a condition has failed previously
+
+i = 1;
+while 1 {
+    if(i > 10){
+        break;
+    }
+    if( i == 1){
+        i = i * 2;
+        continue;
+    }
+    i = i + 1;
+}
+print i;

@@ -1,0 +1,17 @@
+gcd = alg(x,y){
+    if y == 0 {
+        return x;
+    }
+    return gcd(y,x mod y);
+};
+lcm = alg(x,y){
+    g = gcd(x,y);
+    return (x div g)*y;
+};
+x =1;
+l =1;
+while x <= 20{
+    l = lcm(l,x);
+    x = x + 1;
+}
+print l;

@@ -1,0 +1,19 @@
+N = 600851475143;
+#algo to find prime factors
+largest_prime = alg(N){
+    p = 2;
+    biggest = 1;
+    while p**2 <= N{
+        if N%p == 0 {
+            N = N//p;
+            biggest = p;
+            continue;
+        }
+        p = p+1;
+    }
+    if N > 1 {
+        biggest = N; # N is prime
+    }
+    return biggest;
+};
+print largest_prime(N);
