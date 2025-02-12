@@ -1,18 +1,18 @@
-f = alg(x){
-	g = alg(){
+let f = alg(x){
+	let g = alg(){
 		print x;
 	};
 	return g;
 };
-g = f(1);
+let g = f(1);
 print g;
-h = alg(a){
-	k = alg(){
+let h = alg(a){
+	let k = alg(){
 		print a;
 	};
 	return k;
 };
-k=h(g);
+let k=h(g);
 print k;
-x = 2;
-y = g();
+let x = 2;
+let y = g();

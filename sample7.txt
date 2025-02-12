@@ -1,12 +1,12 @@
-x = vec 100;
-i = 0;
+let x = vec 100;
+let i = 0;
 while i< 100 {
     x[i] = 3.14 * i/100;
 i = i + 1;
 }
-n = 3;
-f = x;
-y = x;
+let n = 3;
+let f = x;
+let y = x;
 while n < 100 {
     f = - x*x * f/(n*(n-1));
     y = y + f;

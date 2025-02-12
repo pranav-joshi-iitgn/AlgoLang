@@ -23,9 +23,14 @@ if isinstance(res,ValueError):
     print("_"*50 + "\n")
     PrintError(res)
 else:
-    if DEBUG_WITH_COLOR:print("\x1b[38;2;0;0;255mOutput\x1b[0m")
-    else:print("Output:")
-    print("_"*50 + "\n")
-    res = s0.eval()
-    if isinstance(res,ValueError):PrintError(res)
+    try:
+        if DEBUG_WITH_COLOR:print("\x1b[38;2;0;0;255mOutput\x1b[0m")
+        else:print("Output")
+        print("_"*50 + "\n")
+        s0.eval()
+    except ValueError as e:
+        if DEBUG_WITH_COLOR:print("\x1b[38;2;255;0;0mRuntime Error\x1b[0m")
+        else:print("Runtime Error")
+        print("_"*50 + "\n")
+        PrintError(e)
     print("\n\n" + "_"*50 + "\n")

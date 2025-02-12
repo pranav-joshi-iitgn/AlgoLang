@@ -1,18 +1,19 @@
 # Fibonacci numbers
-f = alg(L){
+let f = alg(L){
 	# L is a list
-	x = L[0];
-	y = L[1];
-	z = x + y;
+	let x = L[0];
+	let y = L[1];
+	let z = x + y;
 	L[0] = y;
 	L[1] = z;
 	return z;
 };
-F = list 2;
+let F = list 2;
 F[0] = 1;
 F[1] = 1;
 
-i = 0;
+let i = 0;
+let ret;
 while i < 3 {
 	ret = f(F);
 	i = i + 1;

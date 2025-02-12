@@ -12,11 +12,11 @@ newline = "\n\r"
 
 keywords = [
     "while","if",'else','elif',
-    'type','in','and','or','not',
-    'True','False',"None","print",
+    'in','and','or','not',
+    "print",
     'run','list','return','alg',
     'with','vec','plot','break',
-    'continue','mod','div'
+    'continue','mod','div','let'
 ]
 
 chartypes = [

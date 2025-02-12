@@ -1,0 +1,17 @@
+let gcd = alg(x,y){
+    if y == 0 {
+        return x;
+    }
+    return gcd(y,x mod y);
+};
+let lcm = alg(x,y){
+    let g = gcd(x,y);
+    return (x div g)*y;
+};
+let x =1;
+let l =1;
+while x <= 20{
+    l = lcm(l,x);
+    x = x + 1;
+}
+print l;

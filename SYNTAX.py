@@ -91,7 +91,9 @@ class Id(Token):
         x = self.value
         for i in range(len(SYMBOLSTACK)-1,-1,-1):
             SYMBOLS = SYMBOLSTACK[i]
-            if x in SYMBOLS:return SYMBOLS[x]
+            if x in SYMBOLS:
+                if SYMBOLS[x] is None: raise ValueError(f"{x} is not assigned yet")
+                return SYMBOLS[x]
         print(x,"is not defined")
         raise ValueError("undefined variable")
 
@@ -576,6 +578,7 @@ class S1(Node):
         elif s[0][1] == "plot":left = Plot()
         elif s[0][1] == "break":left = Brk()
         elif s[0][1] == "continue":left = Cont()
+        elif s[0][1] == "let":left = Def()
         else:left = A()
         try:res = left.parse(s[:-1])
         except:return ValueError(on_wrong)
@@ -585,6 +588,48 @@ class S1(Node):
         L = self.children
         assert len(L) == 2
         return L[0].eval()
+
+class Def(Node):
+    name = "Def"
+    opname = "="
+    left_associative =False
+    def parse(self,s:list):
+        n = len(s)
+        on_wrong = "incorrect definition:\n" + TokensToStr(s,DEBUG_WITH_COLOR)
+        if not n>=2: return ValueError(on_wrong)
+        if not s[0][1] == "let": return ValueError(on_wrong)
+        child = Token("let")
+        self.children = [child]
+        if not s[1][0] == "id": return ValueError(on_wrong)
+        if s[1][1] in RESTRICTED: return ValueError(f"cannot set the read-only variable {s[1][1]} :\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        child = Id(s[1][1])
+        self.children.append(child)
+        if n == 2:return
+        if not s[2][1]=="=": return ValueError(on_wrong)
+        child = Token("=")
+        self.children.append(child)
+        if n == 3: return ValueError("empty RHS in definition:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        right = s[3:]
+        if right[0][1] == "{":Right = F()
+        elif right[0][1] == "list":Right = Lis()
+        elif right[0][1] == "vec":Right = Vec()
+        else: Right = CS0()
+        try:res = Right.parse(right)
+        except:return ValueError(on_wrong)
+        if isinstance(res,ValueError):return ValueError(on_wrong,res)
+        self.children.append(Right)
+    def eval(self):
+        global SYMBOLSTACK
+        L = self.children
+        n = len(L)
+        assert n >=2
+        SYMBOL = SYMBOLSTACK[-1]
+        name = L[1].name
+        if n == 2:SYMBOL[name] = None
+        elif n == 4:
+            value = L[3].eval()
+            SYMBOL[name] = value
+        else: raise ValueError(f"n = {n} ..how?")
 
 class A(Node):
     name = "A"
@@ -624,6 +669,7 @@ class A(Node):
         #else:
         value = L[2].eval()
         L[0].update(value)
+
 
 class P(Node):
     name:"P"
@@ -736,11 +782,7 @@ class R(Node):
             elif not isinstance(arg,list):arg = [arg]
         else:
             arg = []
-        SYMBOLS = {
-            "nl":"\n",
-            "tab":"\t",
-            "LASTCONDITION":True,
-        }
+        SYMBOLS =DEFAULT_SYMBOLS.copy()
         SYMBOLSTACK.append(SYMBOLS)
         to_ret = f.eval(arg)
         SYMBOLSTACK.pop()
@@ -788,7 +830,6 @@ class D(Node):
         assert n == 2
         L[1].update(dict())
 
-
 """
 CS0 -> CS1 or CS0 | CS1
 CS1 -> CS2 and CS1 | CS2
@@ -809,28 +850,6 @@ class CS1(BinOp):
     def other(self):return CS2()
     def op(self,x,y):return x and y
 
-# class CS2(Node):
-#     name = "CS2"
-#     def parse(self,s:list):
-#         self.value = s
-#         n = len(s)
-#         assert n > 0
-#         x = s[0]
-#         if x[1] == "not":
-#             left = Token("not")
-#             right = C0()
-#             right.parse(s[1:])
-#             self.children = [left,right]
-#         else:
-#             child = C0()
-#             child.parse(s)
-#             self.children = [child]
-#     def eval(self):
-#         L = self.children
-#         n = len(L)
-#         if n == 1:return L[0].eval()
-#         elif n == 2:return not L[1].eval()
-
 class CS2(UnOp):
     name = "CS2"
     opname = "not"
@@ -838,12 +857,12 @@ class CS2(UnOp):
     def op(self,x):return not x
 
 """
-C0 -> E0 == C0
-C0 -> E0 >  C0
-C0 -> E0 <  C0
-C0 -> E0 >= C0
-C0 -> E0 <= C0
-C0 -> E0 != C0
+C0 -> C0 == E0
+C0 -> C0 >  E0
+C0 -> C0 <  E0
+C0 -> C0 >= E0
+C0 -> C0 <= E0
+C0 -> C0 != E0
 """
 
 class C0(MultiBinOp):
@@ -861,47 +880,11 @@ class C0(MultiBinOp):
         if operation == "!=" : return x != y
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
-# class C0(BinOp):
-#     name = "C0"
-#     opname = "=="
-#     def duplicate(self):return C0()
-#     def other(self):return C1()
-#     def op(self,x,y):return x == y
 
-# class C1(BinOp):
-#     name = "C1"
-#     opname = ">"
-#     def duplicate(self):return C1()
-#     def other(self):return C2()
-#     def op(self,x,y):return x > y
-
-# class C2(BinOp):
-#     name = "C2"
-#     opname = "<"
-#     def duplicate(self):return C2()
-#     def other(self):return C3()
-#     def op(self,x,y):return x < y
-
-# class C3(BinOp):
-#     name = "C3"
-#     opname = ">="
-#     def duplicate(self):return C3()
-#     def other(self):return C4()
-#     def op(self,x,y):return x >= y
-
-# class C4(BinOp):
-#     name = "C4"
-#     opname = "<="
-#     def duplicate(self):return C4()
-#     def other(self):return C5()
-#     def op(self,x,y):return x <= y
-
-# class C5(BinOp):
-#     name = "C5"
-#     opname = "!="
-#     def duplicate(self):return C5()
-#     def other(self):return E0()
-#     def op(self,x,y):return x != y
+"""
+E0 -> E0 + E2
+E0 -> E0 - E2
+"""
 
 class E0(MultiBinOp):
     name = "E0"
@@ -912,17 +895,14 @@ class E0(MultiBinOp):
     def op(self,x,y,operation):
         if operation == "+" : return x+y
         if operation == "-" : return x-y
-        else:
-            print("This is not good")
+        else:print("This is not good")
 
-#class E2(BinOp):
-#    name = "E2"
-#    opname = "*"
-#    left_associative = True
-#    def duplicate(self):return E2()
-#    def other(self):return E3()
-#    def op(self,x,y):return x*y
-
+"""
+E2 -> E2 * E4
+E2 -> E2 / E4
+E2 -> E2 // E4 | E2 div E4
+E2 -> E2 % E4 | E2 mod E4
+"""
 
 class E2(MultiBinOp):
     name = "E0"
@@ -937,41 +917,31 @@ class E2(MultiBinOp):
         if operation == "%" : return x%y
         if operation == "div" : return x//y
         if operation == "mod" : return x%y
-        else:
-            raise ValueError(f"unrecognised binary operation {operation}")
+        else:raise ValueError(f"unrecognised binary operation {operation}")
 
+"""
+E4 -> E7 ** E4
+"""
 
-#class E3(BinOp):
-#    name = "E3"
-#    opname = "/"
-#    left_associative = True
-#    def duplicate(self):return E3()
-#    def other(self):return E4()
-#    def op(self,x,y):return x/y
+# class E4(BinOp):
+#     name = "E4"
+#     opname = "**"
+#     left_associative =False
+#     def duplicate(self):return E4()
+#     def other(self):return E7()
+#     def op(self,x,y):return x ** y
 
-class E4(BinOp):
+class E4(MultiBinOp):
     name = "E4"
-    opname = "**"
-    left_associative =False
+    opnames = ["**","^"]
+    left_associative = False
     def duplicate(self):return E4()
     def other(self):return E7()
-    def op(self,x,y):return x ** y
+    def op(self,x,y,operation):
+        if operation == "**" : return x**y
+        if operation == "^" : return x**y
+        else:raise ValueError(f"unrecognised binary operation {operation}")
 
-#class E5(BinOp):
-#    name = "E5"
-#    opname = "//"
-#    left_associative =True
-#    def duplicate(self):return E5()
-#    def other(self):return E6()
-#    def op(self,x,y):return x // y
-
-#class E6(BinOp):
-#    name = "E6"
-#    opname = "%"
-#    left_associative =True
-#    def duplicate(self):return E6()
-#    def other(self):return E7()
-#    def op(self,x,y):return x % y
 
 class E7(UnOp):
     name = "E7"
@@ -1148,11 +1118,7 @@ class FC(Node):
         f = left.eval()
         assert isinstance(f,F)
         assert isinstance(right,CSV)
-        SYMBOLS = {
-            "nl":"\n",
-            "tab":"\t",
-            "LASTCONDITION":True,
-        }
+        SYMBOLS = DEFAULT_SYMBOLS.copy()
         SYMBOLSTACK.append(SYMBOLS)
         #body1 = right.children[1]
         #body2 = f.children[1]
@@ -1201,7 +1167,10 @@ class V(Node):
         assert n > 0
         x = L[0]
         x = x.value
-        SYMBOLS = SYMBOLSTACK[-1]
+        if x in RESTRICTED:raise ValueError(f"trying to update read only variable {x}")
+        for SYMBOLS in SYMBOLSTACK[::-1]:
+            if x in SYMBOLS:break
+        else:raise ValueError(f"couldn't find variable {x}")
         if n == 1:
             SYMBOLS[x] = value
         elif n == 4:
@@ -1209,13 +1178,18 @@ class V(Node):
             SYMBOLS[x][ind] = value
         else:raise ValueError("This shouldn't be happening")
 
-SYMBOLS = {
+DEFAULT_SYMBOLS = {
     "nl":"\n",
     "tab":"\t",
     "LASTCONDITION":True,
+    "true":True,
+    "false":False,
+    "null":None
 }
 
-SYMBOLSTACK = [SYMBOLS]
+RESTRICTED = set(DEFAULT_SYMBOLS.keys())
+
+SYMBOLSTACK = [DEFAULT_SYMBOLS.copy()]
 
 def PrintError(Err):
     assert isinstance(Err,ValueError),"Not an error"
@@ -1226,8 +1200,6 @@ def PrintError(Err):
     m,Err = args
     print(m,"\n")
     PrintError(Err)
-
-
 
 if __name__ == "__main__":
     import argparse

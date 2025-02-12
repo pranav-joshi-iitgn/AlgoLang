@@ -1,0 +1,14 @@
+let x = 1;
+let y = 1;
+let Max_limit = 4000000;
+let S = 0;
+let z;
+while y < Max_limit {
+    if y mod 2 == 0 {
+        S = S + y;
+    }
+    z = x + y;
+    x = y;
+    y = z;
+}
+print S;

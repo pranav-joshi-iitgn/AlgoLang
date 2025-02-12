@@ -1,8 +1,9 @@
 # This is a comment
-FibN = alg(N){
-	i = 0;
-	X = 1;
-	Y = 1;
+let FibN = alg(N){
+	let i = 0;
+	let X = 1;
+	let Y = 1;
+	let Z;
 	while i < N-1 {
 		Z = Y + X;
 		X = Y;

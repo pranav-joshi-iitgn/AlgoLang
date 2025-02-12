@@ -1,3 +1,3 @@
-f = alg(x,y){print x;}; #comment
-x = 1;
+let f = alg(x,y){print x;}; #comment
+let x = 1;
 run f*2 with 2,(3,1);
