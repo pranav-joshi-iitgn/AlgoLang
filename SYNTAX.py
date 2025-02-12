@@ -1,11 +1,14 @@
 from LEXER import *
-from graphviz import Digraph
-from ast import literal_eval
-import termplotlib as plt
-from numpy import *
+from ast import literal_eval #for strings only
+import termplotlib as plt #for `plot` statement
+from numpy import * #for vectors
 
+# global variable for visualisation of AST
+from graphviz import Digraph
 Graph = Digraph("AST")
 cur_node = 0
+
+# settings
 DEBUG_WITH_COLOR = False
 TESTING = False
 
@@ -57,10 +60,8 @@ class Node:
 class Token:
     """
     Base class for terminals
-    Example usage
-    ```
-    > some_token = Token("5")
-    ```
+    Example usage:
+    >>> some_token = Token("5")
     """
     def __init__(self,value:str):
         self.value = value
@@ -104,10 +105,8 @@ class Str(Token):
 class Id(Token):
     """
     Identifiers.
-    Example usage
-    ```
-    > x = Id("x")
-    ```
+    Example usage:
+    >>> x = Id("x")
     """
     name = "id"
     def __init__(self,value:str):
@@ -140,7 +139,7 @@ class Block(Node):
     A block returns values if there are return statements inside. For example:
 
     ```
-    > x = {return 1;};
+    x = {return 1;};
     ```
 
     will assign `1` to `x` .
@@ -224,14 +223,6 @@ class Block(Node):
         if len(env) : s += "where\n" + env
         return s + "\n"
 
-def SymbolsNeeded(node):
-    if isinstance(node,Id):return {node.name}
-    elif isinstance(node,Token):return set()
-    need = set()
-    for child in node.children:
-        need = need.union(SymbolsNeeded(child))
-    return need
-
 class UnaryOperation(Node):
     """
     Base class for all unary operations.
@@ -269,11 +260,11 @@ class List(UnaryOperation):
     """
     Example:
     ```
-    > L = list 4;
+    L = list 4;
     ```
     This creates a list with size of 4 with null values as elements
     ```
-    > L = (1,2,3);
+    L = (1,2,3);
     ```
     This creates a list of size 3 with elements 1, 2, 3
     Lists need not contain elements of a particular type.
@@ -292,8 +283,8 @@ class Vector(UnaryOperation):
     These are basically numpy's ndarrays
     Example:
     ```
-    > x = [1,1,0];
-    > print 2*x;
+    x = [1,1,0];
+    print 2*x;
     ```
     This will output `[2,2,0]` as the output.
     """
@@ -398,6 +389,17 @@ class MultipleBinaryOperation(Node):
         elif len(L) == 3:return self.op(L[0].eval(),L[2].eval(),L[1].name)
 
 class Statements(Node):
+    """
+    Many statements. A statement can be classified in 5 main categories:
+
+    1. a `while` loop
+    2. an `if` condition
+    3. `elif`
+    4. `else`
+    5. Single line statements
+
+    Single statements ends with a `;`, while others use {..} syntax
+    """
     name = "Statements"
     def parse(self,s:list):
         n = len(s)
@@ -456,6 +458,9 @@ class Statements(Node):
             if x is not None: return x
 
 class Loop(Node):
+    """
+    While loops
+    """
     name = "Loop"
     def parse(self,s:list):
         n = len(s)
@@ -504,6 +509,9 @@ class Loop(Node):
         if br <= 0 : print("broken while because it took over 10^9 loops")
 
 class Break(Node):
+    """
+    Implements the `breakloop`
+    """
     def parse(self,s:list):
         n = len(s)
         if not n == 1:return ValueError("break statements only have the `breakloop` keyword:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
@@ -513,6 +521,9 @@ class Break(Node):
         return self
 
 class Continue(Node):
+    """
+    Implements the `skipit` statements
+    """
     def parse(self,s:list):
         n = len(s)
         if not n == 1:return ValueError("skip statements only have the `skipit` keyword:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
@@ -661,6 +672,9 @@ class SingleStatement(Node):
         return L[0].eval()
 
 class Definition(Node):
+    """
+    Defines a variable in the innermost scope
+    """
     name = "Def"
     opname = "="
     left_associative =False
@@ -703,6 +717,10 @@ class Definition(Node):
         else: raise ValueError(f"n = {n} ..how?")
 
 class Assignment(Node):
+    """
+    Updates the value of variable found in the innermost scope, till now.
+    If no variable found, throws an error.
+    """
     name = "Assignment"
     opname = "="
     left_associative =False
@@ -811,6 +829,16 @@ class PlotStatement(Node):
             except:print("\nunable to plot\n")
 
 class RunStatement(Node):
+    """
+    Runs an algorithm.
+    Algorithms are ran without any arguments by default.
+    Use the `with` keyword to specify arguments.
+    Example:
+    ```
+    f = alg (x,y){print x + y;};
+    run f with (1,2);
+    ```
+    """
     name:"RunStatement"
     def parse(self,s:list):
         self.value = s
@@ -859,6 +887,10 @@ class RunStatement(Node):
         SYMBOLS = SYMBOLSTACK[-1]
 
 class ReturnStatement(Node):
+    """
+    These are the only kind of statements that return a value upon calling `eval`.
+    When this happens in the `eval` for `Statements`, the value is returned there too.
+    """
     name:"ReturnStatement"
     def parse(self,s:list):
         self.value = s
@@ -880,6 +912,15 @@ class ReturnStatement(Node):
         return L[1].eval()
 
 class Dictionary(Node):
+    """
+    Initialises an empty dictionary for an already initialised variable, or location in list.
+    Example:
+    ```
+    let D;
+    dict D;
+    D["x"]=1;
+    ```
+    """
     name:"Dictionary"
     def parse(self,s:list):
         self.value = s
@@ -900,13 +941,10 @@ class Dictionary(Node):
         assert n == 2
         L[1].update(dict())
 
-"""
-SOPLogic -> MinTerm or SOPLogic | MinTerm
-MinTerm -> LogicLiteral and MinTerm | LogicLiteral
-LogicLiteral -> not Comparison | Comparison
-"""
-
 class SOPLogic(BinaryOperation):
+    """
+    SOPLogic -> MinTerm or SOPLogic | MinTerm
+    """
     name = "SOPLogic"
     opname = "or"
     def duplicate(self):return SOPLogic()
@@ -914,6 +952,9 @@ class SOPLogic(BinaryOperation):
     def op(self,x,y):return x or y
 
 class MinTerm(BinaryOperation):
+    """
+    MinTerm -> LogicLiteral and MinTerm | LogicLiteral
+    """
     name = "MinTerm"
     opname = "and"
     def duplicate(self):return MinTerm()
@@ -921,21 +962,23 @@ class MinTerm(BinaryOperation):
     def op(self,x,y):return x and y
 
 class LogicLiteral(UnaryOperation):
+    """
+    LogicLiteral -> not Comparison | Comparison
+    """
     name = "LogicLiteral"
     opname = "not"
     def other(self):return Comparison()
     def op(self,x):return not x
 
-"""
-Comparison -> Expression == Expression
-Comparison -> Expression >  Expression
-Comparison -> Expression <  Expression
-Comparison -> Expression >= Expression
-Comparison -> Expression <= Expression
-Comparison -> Expression != Expression
-"""
-
 class Comparison(MultipleBinaryOperation):
+    """
+    Comparison -> Expression == Expression
+    Comparison -> Expression >  Expression
+    Comparison -> Expression <  Expression
+    Comparison -> Expression >= Expression
+    Comparison -> Expression <= Expression
+    Comparison -> Expression != Expression
+    """
     name = "Comparison"
     opnames = ["==",">","<",">=","<=","!="]
     left_associative = True
@@ -950,13 +993,11 @@ class Comparison(MultipleBinaryOperation):
         if operation == "!=" : return x != y
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
-
-"""
-Expression -> Expression + Term
-Expression -> Expression - Term
-"""
-
 class Expression(MultipleBinaryOperation):
+    """
+    Expression -> Expression + Term
+    Expression -> Expression - Term
+    """
     name = "Expression"
     opnames = ["+","-"]
     left_associative = True
@@ -967,14 +1008,13 @@ class Expression(MultipleBinaryOperation):
         if operation == "-" : return x-y
         else:print("This is not good")
 
-"""
-Term -> Term * ExponentTower
-Term -> Term / ExponentTower
-Term -> Term // ExponentTower | Term div ExponentTower
-Term -> Term % ExponentTower | Term mod ExponentTower
-"""
-
 class Term(MultipleBinaryOperation):
+    """
+    Term -> Term * ExponentTower
+    Term -> Term / ExponentTower
+    Term -> Term // ExponentTower | Term div ExponentTower
+    Term -> Term % ExponentTower | Term mod ExponentTower
+    """
     name = "Term"
     opnames = ["*","/","//","%","mod","div"]
     left_associative = True
@@ -989,11 +1029,10 @@ class Term(MultipleBinaryOperation):
         if operation == "mod" : return x%y
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
-"""
-ExponentTower -> SignedValue ** ExponentTower
-"""
-
 class ExponentTower(MultipleBinaryOperation):
+    """
+    ExponentTower -> SignedValue ** ExponentTower
+    """
     name = "ExponentTower"
     opnames = ["**","^"]
     left_associative = False
@@ -1004,14 +1043,21 @@ class ExponentTower(MultipleBinaryOperation):
         if operation == "^" : return x**y
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
-
 class SignedValue(UnaryOperation):
+    """
+    SignedValue -> - EnclosedValues | EnclosedValues
+    """
     name = "SignedValue"
     opname = "-"
     def other(self):return EnclosedValues()
     def op(self,x):return -x
 
 class EnclosedValues(Node):
+    """
+    EnclosedValues -> ( CommaSeparatedValues )
+    EnclosedValues -> [ CommaSeparatedValues ]
+    EnclosedValues -> Value
+    """
     name = "EnclosedValues"
     def parse(self,s:list):
         self.value = s
@@ -1073,7 +1119,25 @@ class Value(Node):
         child = self.children[0]
         return child.eval()
 
+def SymbolsNeeded(node):
+    """
+    Returns a set of all the identifiers that occur in the AST with given node as head
+    """
+    if isinstance(node,Id):return {node.name}
+    elif isinstance(node,Token):return set()
+    need = set()
+    for child in node.children:
+        need = need.union(SymbolsNeeded(child))
+    return need
+
 class Algorithm(Node):
+    """
+    Used to create algorithms from Blocks, with the keyword `alg`.
+    Example:
+    ```
+    f = alg(x){print x;};
+    ```
+    """
     name = "Algorithm"
     def parse(self,s):
         self.value = s
@@ -1106,6 +1170,11 @@ class Algorithm(Node):
         return f
 
 class Environment(Node):
+    """
+    Comma Separated Identifiers (not values).
+    This returns a list of names (not values) of identifiers on `eval`
+    Mainly used for algorithm definition
+    """
     name = "Environment"
     def parse(self,s):
         self.value = s
@@ -1159,6 +1228,13 @@ class CommaSeparatedValues(Node):
         return  [x.eval() for x in self.children[::2]]
 
 class FunctionCall(Node):
+    """
+    Example:
+    ```
+    let f = alg(x){return x*2;};
+    print f(2); #This is a function call
+    ```
+    """
     name = "FunctionCall"
     def parse(self,s):
         self.value = s
@@ -1187,6 +1263,11 @@ class FunctionCall(Node):
         return to_ret
 
 class Assignable(Node):
+    """
+    Either just an identifier (`x`), or an identifier with an index (`L[1+2]`).
+    Returns the value upon `eval`.
+    Updates the value upon `update`
+    """
     name = "Assignable"
     def parse(self,s):
         self.value = s
@@ -1214,7 +1295,6 @@ class Assignable(Node):
         if isinstance(lis,list):
             if ind < 0 or ind > len(lis):return None
         return lis[ind]
-
     def update(self,value):
         L = self.children
         n = len(L)
@@ -1255,15 +1335,7 @@ def PrintError(Err):
     print(m,"\n")
     PrintError(Err)
 
-if __name__ == "__main__":
-    import argparse
-    parser = argparse.ArgumentParser()
-    parser.add_argument("file")
-    parser.add_argument("vis")
-    args = parser.parse_args()
-    file = args.file
-    vis = args.vis
-    s = open(file).read()
+def RunPretty(s,vis=False):
     print("_"*50 + "\n")
     print("Program")
     print("_"*50 + "\n")
@@ -1279,11 +1351,16 @@ if __name__ == "__main__":
         print("_"*50 + "\n")
         PrintError(res)
     else:
-        if DEBUG_WITH_COLOR:print("\x1b[38;2;0;0;255mOutput\x1b[0m")
-        else:print("Output:")
-        print("_"*50 + "\n")
-        res = s0.eval()
-        if isinstance(res,ValueError):PrintError(res)
+        try:
+            if DEBUG_WITH_COLOR:print("\x1b[38;2;0;0;255mOutput\x1b[0m")
+            else:print("Output")
+            print("_"*50 + "\n")
+            s0.eval()
+        except ValueError as e:
+            if DEBUG_WITH_COLOR:print("\x1b[38;2;255;0;0mRuntime Error\x1b[0m")
+            else:print("Runtime Error")
+            print("_"*50 + "\n")
+            PrintError(e)
         print("\n\n" + "_"*50 + "\n")
         #if DEBUG_WITH_COLOR:print("\x1b[38;2;0;255;0mFinished\x1b[0m")
         #else:print("Finished")
@@ -1291,3 +1368,58 @@ if __name__ == "__main__":
         if vis == "True":
             s0.PlotTree()
             Graph.render(file + ".png",format='png',view=True)
+
+def RunFilePretty(filename,vis=False):
+    try:file = open(filename,'r')
+    except:
+        print(filename,"not found in this directory")
+        return
+    s = file.read()
+    RunPretty(s,vis)
+
+def TestFile(filename):
+    global TESTING
+    old_TESTING = TESTING
+    TESTING = True
+    try:file = open(filename,'r')
+    except:
+        print(filename,"not found in this directory")
+        TESTING = old_TESTING
+        return
+    try:s = file.read()
+    except:
+        print("couldn't read from",filename)
+        TESTING = old_TESTING
+        return
+    try:s = lex(s)
+    except:
+        print("lexing failed on",filename)
+        TESTING = old_TESTING
+        return
+    s0 = Statements()
+    try:res = s0.parse(s)
+    except:
+        print(filename,"crashed before giving a respnese")
+        TESTING = old_TESTING
+        return
+    if isinstance(res,ValueError):
+        print("compilation error in",filename)
+        TESTING = old_TESTING
+        return
+    try:s0.eval()
+    except:
+        print("Run-time error in",filename)
+        TESTING = old_TESTING
+        return
+    print(filename,"ran")
+    TESTING = old_TESTING
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("file")
+    parser.add_argument("vis")
+    args = parser.parse_args()
+    file = args.file
+    vis = args.vis
+    RunFilePretty(file,vis)
