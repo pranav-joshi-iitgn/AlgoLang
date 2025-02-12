@@ -1,5 +1,8 @@
 let a = alg(){
     print x;
 };
-let x = 1;
+let x = {
+  if 0 {return 1;} else {return 2;}
+};
 run a*2;
+print -2;

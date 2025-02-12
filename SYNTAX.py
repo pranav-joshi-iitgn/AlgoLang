@@ -10,11 +10,18 @@ DEBUG_WITH_COLOR = False
 TESTING = False
 
 def to_tuple(L):
+    """
+    Recursively converts lists to tuples
+    """
     if isinstance(L,list) or isinstance(L,tuple):
         return tuple(x for x in L)
     else:return L
 
 class Node:
+    """
+    Base class for all non-terminals
+    Every Non-terminal has a `parse` and `eval` method
+    """
     name = "Node"
     def __init__(self):
         self.children = []
@@ -22,11 +29,17 @@ class Node:
     def __repr__(self):
         return self.name + "->" + " ".join([x.name for x in self.children])
     def MakeTree(self):
+        """
+        Makes a string representing the sub-tree with node as head
+        """
         s = [str(self)]
         for child in self.children:
             s.extend(child.MakeTree())
         return s
     def PlotTree(self):
+        """
+        Plots the sub-tree with node as head using Graphviz
+        """
         global Graph,cur_node
         self.id = str(cur_node)
         if len(self.children) > 1 or len(self.children) == 0:
@@ -42,14 +55,20 @@ class Node:
             return cid
 
 class Token:
-    def __init__(self,value):
+    """
+    Base class for terminals
+    Example usage
+    ```
+    > some_token = Token("5")
+    ```
+    """
+    def __init__(self,value:str):
         self.value = value
         self.name = value
     def __repr__(self):
         return self.value
     def MakeTree(self):
             return [self.value]
-
     def PlotTree(self):
         global Graph,cur_node
         self.id = str(cur_node)
@@ -83,8 +102,15 @@ class Str(Token):
         return self.value
 
 class Id(Token):
+    """
+    Identifiers.
+    Example usage
+    ```
+    > x = Id("x")
+    ```
+    """
     name = "id"
-    def __init__(self,value):
+    def __init__(self,value:str):
         self.value = value
         self.name = value
     def eval(self):
@@ -97,8 +123,31 @@ class Id(Token):
         print(x,"is not defined")
         raise ValueError("undefined variable")
 
-class F(Node):
-    name = "F"
+class Block(Node):
+    """
+    A non-terminal respresenting a block of statements.
+    CFG rules:
+
+    Block -> { Statements }
+
+    A block is basically a function and thus has these attributes:
+
+    args : iterable of names of variables that are assigned just after block's evaluation has started.
+    The values can be assigned via a function call
+
+    env : static arguments. These are set during creation of an algorithm (function) using the `alg` keyword
+
+    A block returns values if there are return statements inside. For example:
+
+    ```
+    > x = {return 1;};
+    ```
+
+    will assign `1` to `x` .
+
+    Blocks can be concatenated togather using the `+` operator, and can be repeated by multiplying with a natural number.
+    """
+    name = "Block"
     args = ()
     env = {}
     def parse(self,s:list):
@@ -108,7 +157,7 @@ class F(Node):
         if not n >= 2:return ValueError(self.name + " : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR))
         if not s[0][1] == "{":return ValueError(self.name + " : body should start with '{': \n" + TokensToStr(s,DEBUG_WITH_COLOR))
         if not s[-1][1] == "}":return ValueError(self.name + " : missing closing '}': \n" + TokensToStr(s,DEBUG_WITH_COLOR))
-        body = S0()
+        body = Statements()
         res = body.parse(s[1:-1])
         if isinstance(res,ValueError):return res
         self.children = [Token("{"),body,Token("}")]
@@ -122,7 +171,7 @@ class F(Node):
         body = self.children[1]
         return body.eval()
     def __add__(self,other):
-        par = F()
+        par = Block()
         env1 = self.env
         env2 = other.env
         env = {k:env1[k] for k in env1}
@@ -136,7 +185,7 @@ class F(Node):
             if x not in args:args.append(x)
         par.args = args
         par.env = env
-        body =S0()
+        body =Statements()
         body.children = [self.children[1],other.children[1]]
         par.children = [Token("{"),body,Token("}")]
         return par
@@ -183,8 +232,11 @@ def SymbolsNeeded(node):
         need = need.union(SymbolsNeeded(child))
     return need
 
-class UnOp(Node):
-    name = "E?"
+class UnaryOperation(Node):
+    """
+    Base class for all unary operations.
+    """
+    name = "UnOp"
     other = None
     opname = "op"
     op = None
@@ -213,19 +265,41 @@ class UnOp(Node):
             return self.op(right)
         else: raise ValueError("This isn't good")
 
-class Lis(UnOp):
-    name = "Lis"
+class List(UnaryOperation):
+    """
+    Example:
+    ```
+    > L = list 4;
+    ```
+    This creates a list with size of 4 with null values as elements
+    ```
+    > L = (1,2,3);
+    ```
+    This creates a list of size 3 with elements 1, 2, 3
+    Lists need not contain elements of a particular type.
+    Lists are concatenated using the + operator.
+    """
+    name = "List"
     opname = "list"
-    def other(self):return CS0()
+    def other(self):return SOPLogic()
     def op(self,x):
         if isinstance(x,int):return [None]*x
         if isinstance(x,list):return x
         if isinstance(x,ndarray):return list(x)
 
-class Vec(UnOp):
-    name = "Vec"
+class Vector(UnaryOperation):
+    """
+    These are basically numpy's ndarrays
+    Example:
+    ```
+    > x = [1,1,0];
+    > print 2*x;
+    ```
+    This will output `[2,2,0]` as the output.
+    """
+    name = "Vector"
     opname = "vec"
-    def other(self):return CS0()
+    def other(self):return SOPLogic()
     def op(self,x):
         if x is None: raise ValueError("give the size of the array please")
         if isinstance(x,int):return zeros(x)
@@ -236,14 +310,11 @@ class Vec(UnOp):
             if size >1e6:raise ValueError(f"Cannot allocate memory for vector of shape {x}")
             return zeros(x)
 
-class Neg(UnOp):
-    name = "Neg"
-    opname = "-"
-    def other(self):return CS0()
-    def op(self,x):return [None]*x
-
-class BinOp(Node):
-    name = "E?"
+class BinaryOperation(Node):
+    """
+    Base class for single binary operations
+    """
+    name = "BinOp"
     other = None
     opname = "op"
     op = None
@@ -281,8 +352,13 @@ class BinOp(Node):
         if len(L) == 1:return L[0].eval()
         elif len(L) == 3:return self.op(L[0].eval(),L[2].eval())
 
-class MultiBinOp(Node):
-    name = "E?"
+class MultipleBinaryOperation(Node):
+    """
+    Base class for non-terminals that implement
+    many binary operations at same level of precedence,
+    and same associativity (left,right)
+    """
+    name = "MultiBinOp"
     other = None
     opnames = ["op"]
     op = None
@@ -321,8 +397,8 @@ class MultiBinOp(Node):
         if len(L) == 1:return L[0].eval()
         elif len(L) == 3:return self.op(L[0].eval(),L[2].eval(),L[1].name)
 
-class S0(Node):
-    name = "S0"
+class Statements(Node):
+    name = "Statements"
     def parse(self,s:list):
         n = len(s)
         last_err = None
@@ -333,12 +409,12 @@ class S0(Node):
                 if s[i][1] == "}":
                     left = s[:i+1]
                     right = s[i+1:]
-                    if s[0][1] == "while":Left = W()
-                    elif s[0][1] == "elif":Left = EI()
-                    elif s[0][1] == "else":Left = EI1()
-                    elif s[0][1] == "if":Left = I()
+                    if s[0][1] == "while":Left = Loop()
+                    elif s[0][1] == "elif":Left = ElseIfStatement()
+                    elif s[0][1] == "else":Left = ElseStatement()
+                    elif s[0][1] == "if":Left = IfStatement()
                     else:continue
-                    Right = S0()
+                    Right = Statements()
                     res = Left.parse(left)
                     if isinstance(res,ValueError):
                         last_err = res
@@ -358,8 +434,8 @@ class S0(Node):
                 if s[i][1] == ";":
                     left = s[:i+1]
                     right = s[i+1:]
-                    Left = S1()
-                    Right = S0()
+                    Left = SingleStatement()
+                    Right = Statements()
                     try:res = Left.parse(left)
                     except:continue
                     if isinstance(res,ValueError):
@@ -379,8 +455,8 @@ class S0(Node):
             x = child.eval()
             if x is not None: return x
 
-class W(Node):
-    name = "W"
+class Loop(Node):
+    name = "Loop"
     def parse(self,s:list):
         n = len(s)
         on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
@@ -392,8 +468,8 @@ class W(Node):
             if s[i][1] == '{':
                 condition =s[1:i]
                 code = s[i:]
-                cs0 = CS0()
-                f = F()
+                cs0 = SOPLogic()
+                f = Block()
                 try:res = cs0.parse(condition)
                 except:continue
                 if isinstance(res,ValueError):
@@ -418,36 +494,35 @@ class W(Node):
         SYMBOLS = SYMBOLSTACK[-1]
         while condition.eval() and br > 0:
             x = code.eval()
-            if isinstance(x,Brk):
+            if isinstance(x,Break):
                 SYMBOLS["LASTCONDITION"] = True
                 break
-            if isinstance(x,Cont):continue
+            if isinstance(x,Continue):continue
             if x is not None:return x
             br -= 1
         else:SYMBOLS["LASTCONDITION"] = False
         if br <= 0 : print("broken while because it took over 10^9 loops")
 
-class Brk(Node):
+class Break(Node):
     def parse(self,s:list):
         n = len(s)
-        if not n == 1:return ValueError("break statements only have the `break` keyword:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
-        if not s[0][1] == "break":return ValueError("break statements start with `break`:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
-        self.children = [Token("break")]
+        if not n == 1:return ValueError("break statements only have the `breakloop` keyword:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        if not s[0][1] == "breakloop":return ValueError("break statements start with `breakloop`:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        self.children = [Token("breakloop")]
     def eval(self):
         return self
 
-class Cont(Node):
+class Continue(Node):
     def parse(self,s:list):
         n = len(s)
-        if not n == 1:return ValueError("continue statements only have the `continue` keyword:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
-        if not s[0][1] == "continue":return ValueError("continue statements start with `continue`:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
-        self.children = [Token("continue")]
+        if not n == 1:return ValueError("skip statements only have the `skipit` keyword:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        if not s[0][1] == "skipit":return ValueError("skip statements start with `skipit`:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
+        self.children = [Token("skipit")]
     def eval(self):
         return self
 
-
-class I(Node):
-    name = "I"
+class IfStatement(Node):
+    name = "If"
     def parse(self,s:list):
         n = len(s)
         on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
@@ -459,8 +534,8 @@ class I(Node):
             if s[i][1] == '{':
                 condition =s[1:i]
                 code = s[i+1:-1]
-                cs0 = CS0()
-                s0 = S0()
+                cs0 = SOPLogic()
+                s0 = Statements()
                 try:res = cs0.parse(condition)
                 except:continue
                 if isinstance(res,ValueError):
@@ -489,8 +564,8 @@ class I(Node):
             return to_ret
         else:SYMBOLS["LASTCONDITION"] =False
 
-class EI(Node):
-    name = "EI"
+class ElseIfStatement(Node):
+    name = "ElseIfStatement"
     def parse(self,s:list):
         n = len(s)
         on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
@@ -502,8 +577,8 @@ class EI(Node):
             if s[i][1] == '{':
                 condition =s[1:i]
                 code = s[i+1:-1]
-                cs0 = CS0()
-                s0 = S0()
+                cs0 = SOPLogic()
+                s0 = Statements()
                 try:res = cs0.parse(condition)
                 except:continue
                 if isinstance(res,ValueError):
@@ -512,8 +587,6 @@ class EI(Node):
                 try:res=s0.parse(code)
                 except:continue
                 if isinstance(res,ValueError):
-                    #last_err = res
-                    #continue
                     return ValueError(on_wrong,res)
                 self.children = [Token('elif'),cs0,Token("{"),s0,Token("}")]
                 break
@@ -536,8 +609,8 @@ class EI(Node):
         else:
             SYMBOLS["LASTCONDITION"] =False
 
-class EI1(Node):
-    name = "EI1"
+class ElseStatement(Node):
+    name = "ElseStatement"
     def parse(self,s:list):
         n = len(s)
         on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
@@ -545,7 +618,7 @@ class EI1(Node):
         if not s[0][1] == "else":return ValueError(on_wrong)
         if not s[-1][1] == "}"  :return ValueError(on_wrong)
         if not s[1][1] == "{"   :return ValueError(on_wrong)
-        code = F()
+        code = Block()
         try:res = code.parse(s[1:])
         except:return ValueError(on_wrong)
         if isinstance(res,ValueError):
@@ -556,14 +629,12 @@ class EI1(Node):
         assert len(L) == 2
         code = L[1]
         SYMBOLS = SYMBOLSTACK[-1]
-        #assert SYMBOLS["LASTCONDITION"] is not None,"else must have a while or if before it"
         if SYMBOLS["LASTCONDITION"]:return
         SYMBOLS["LASTCONDITION"] = True
         return code.eval()
 
-
-class S1(Node):
-    name = "S1"
+class SingleStatement(Node):
+    name = "SingleStatement"
     def parse(self,s:list):
         n =len(s)
         on_wrong = self.name + f" : syntax error in: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
@@ -571,15 +642,15 @@ class S1(Node):
         if not n > 1:return ValueError(on_wrong)
         if not s[-1][1] == ";":return ValueError(on_wrong)
         right = Token(";")
-        if s[0][1] == "print":left = P()
-        elif s[0][1] == "run":left = R()
-        elif s[0][1] == "dict":left = D()
-        elif s[0][1] == "return":left = Ret()
-        elif s[0][1] == "plot":left = Plot()
-        elif s[0][1] == "break":left = Brk()
-        elif s[0][1] == "continue":left = Cont()
-        elif s[0][1] == "let":left = Def()
-        else:left = A()
+        if s[0][1] == "print":left = PrintStatement()
+        elif s[0][1] == "run":left = RunStatement()
+        elif s[0][1] == "dict":left = Dictionary()
+        elif s[0][1] == "return":left = ReturnStatement()
+        elif s[0][1] == "plot":left = PlotStatement()
+        elif s[0][1] == "breakloop":left = Break()
+        elif s[0][1] == "skipit":left = Continue()
+        elif s[0][1] == "let":left = Definition()
+        else:left = Assignment()
         try:res = left.parse(s[:-1])
         except:return ValueError(on_wrong)
         if isinstance(res,ValueError):return ValueError(on_wrong,res)
@@ -589,7 +660,7 @@ class S1(Node):
         assert len(L) == 2
         return L[0].eval()
 
-class Def(Node):
+class Definition(Node):
     name = "Def"
     opname = "="
     left_associative =False
@@ -610,10 +681,10 @@ class Def(Node):
         self.children.append(child)
         if n == 3: return ValueError("empty RHS in definition:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
         right = s[3:]
-        if right[0][1] == "{":Right = F()
-        elif right[0][1] == "list":Right = Lis()
-        elif right[0][1] == "vec":Right = Vec()
-        else: Right = CS0()
+        if right[0][1] == "{":Right = Block()
+        elif right[0][1] == "list":Right = List()
+        elif right[0][1] == "vec":Right = Vector()
+        else: Right = SOPLogic()
         try:res = Right.parse(right)
         except:return ValueError(on_wrong)
         if isinstance(res,ValueError):return ValueError(on_wrong,res)
@@ -631,8 +702,8 @@ class Def(Node):
             SYMBOL[name] = value
         else: raise ValueError(f"n = {n} ..how?")
 
-class A(Node):
-    name = "A"
+class Assignment(Node):
+    name = "Assignment"
     opname = "="
     left_associative =False
     def parse(self,s:list):
@@ -644,11 +715,11 @@ class A(Node):
                 right = s[i+1:]
                 if not len(left) > 0 : return ValueError("LHS is empty:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
                 if not len(right) > 0 : return ValueError("RHS is empty:\n" + TokensToStr(s,DEBUG_WITH_COLOR))
-                Left = V()
-                if right[0][1] == "{":Right = F()
-                elif right[0][1] == "list":Right = Lis()
-                elif right[0][1] == "vec":Right = Vec()
-                else: Right = CS0()
+                Left = Assignable()
+                if right[0][1] == "{":Right = Block()
+                elif right[0][1] == "list":Right = List()
+                elif right[0][1] == "vec":Right = Vector()
+                else: Right = SOPLogic()
                 try:res = Left.parse(left)
                 except:return ValueError(on_wrong)
                 if isinstance(res,ValueError):return ValueError(on_wrong,res)
@@ -664,15 +735,14 @@ class A(Node):
         n = len(L)
         assert n == 3
         assert L[1].value == "="
-        #if isinstance(L[2],F) and L[2].name == "F":
+        #if isinstance(L[2],Block) and L[2].name == "Block":
         #    L[0].update(L[2])
         #else:
         value = L[2].eval()
         L[0].update(value)
 
-
-class P(Node):
-    name:"P"
+class PrintStatement(Node):
+    name:"PrintStatement"
     def parse(self,s:list):
         n = len(s)
         on_wrong = f"incorrect print statement: \n" + TokensToStr(s,DEBUG_WITH_COLOR)
@@ -680,7 +750,7 @@ class P(Node):
         x = s[0]
         assert x[1] == "print"
         Left = Token(x[1])
-        Right = CS0()
+        Right = SOPLogic()
         try:res = Right.parse(s[1:])
         except:return ValueError(on_wrong)
         if isinstance(res,ValueError):return ValueError(on_wrong,res)
@@ -692,10 +762,10 @@ class P(Node):
         assert n == 2
         x = L[1].eval()
         x = to_tuple(x)
-        if isinstance(x,F):x = x.prepr()
+        if isinstance(x,Block):x = x.prepr()
         if not TESTING:print(x,end = "")
 
-class Plot(Node):
+class PlotStatement(Node):
     name:"plot"
     def parse(self,s:list):
         n = len(s)
@@ -704,7 +774,7 @@ class Plot(Node):
         x = s[0]
         assert x[1] == "plot"
         Left = Token(x[1])
-        Right = CSV()
+        Right = CommaSeparatedValues()
         try:res = Right.parse(s[1:])
         except:return ValueError(on_wrong)
         if isinstance(res,ValueError):return ValueError(on_wrong,res)
@@ -740,8 +810,8 @@ class Plot(Node):
                 del f
             except:print("\nunable to plot\n")
 
-class R(Node):
-    name:"R"
+class RunStatement(Node):
+    name:"RunStatement"
     def parse(self,s:list):
         self.value = s
         on_wrong = "incorrect run statement :\n" + TokensToStr(s,DEBUG_WITH_COLOR)
@@ -753,8 +823,8 @@ class R(Node):
         for i in range(1,n):
             x = s[i]
             if x[1] == "with":
-                Fun = CS0()
-                Arg = CSV()
+                Fun = SOPLogic()
+                Arg = CommaSeparatedValues()
                 try:res= Fun.parse(s[1:i])
                 except:return ValueError(on_wrong)
                 if isinstance(res,ValueError):return ValueError(on_wrong,res)
@@ -763,7 +833,7 @@ class R(Node):
                 if isinstance(res,ValueError):return ValueError(on_wrong,res)
                 self.children = [Left,Fun,Token("with"),Arg]
                 return
-        Fun = CS0()
+        Fun = SOPLogic()
         try:res= Fun.parse(s[1:])
         except:return ValueError(on_wrong)
         if isinstance(res,ValueError):return ValueError(on_wrong,res)
@@ -774,7 +844,7 @@ class R(Node):
         assert n == 4 or n==2
         Fun = L[1]
         f = Fun.eval()
-        assert isinstance(f,F)
+        assert isinstance(f,Block)
         if n==4:
             Arg = L[3]
             arg = Arg.eval(True)
@@ -788,8 +858,8 @@ class R(Node):
         SYMBOLSTACK.pop()
         SYMBOLS = SYMBOLSTACK[-1]
 
-class Ret(Node):
-    name:"Ret"
+class ReturnStatement(Node):
+    name:"ReturnStatement"
     def parse(self,s:list):
         self.value = s
         on_wrong = "incorrect return statement :\n" + TokensToStr(s,DEBUG_WITH_COLOR)
@@ -798,7 +868,7 @@ class Ret(Node):
         x = s[0]
         assert x[1] == "return"
         Left = Token(x[1])
-        Right = CS0()
+        Right = SOPLogic()
         try:res = Right.parse(s[1:])
         except:return ValueError(on_wrong)
         if isinstance(res,ValueError):return ValueError(on_wrong,res)
@@ -809,8 +879,8 @@ class Ret(Node):
         assert n == 2
         return L[1].eval()
 
-class D(Node):
-    name:"D"
+class Dictionary(Node):
+    name:"Dictionary"
     def parse(self,s:list):
         self.value = s
         on_wrong = "incorrect dictionary initialisation :\n" + TokensToStr(s,DEBUG_WITH_COLOR)
@@ -819,7 +889,7 @@ class D(Node):
         x = s[0]
         assert x[1] == "dict"
         Left = Token(x[1])
-        Right = V()
+        Right = Assignable()
         try:res = Right.parse(s[1:])
         except:return ValueError(on_wrong)
         if isinstance(res,ValueError):return ValueError(on_wrong,res)
@@ -831,46 +901,46 @@ class D(Node):
         L[1].update(dict())
 
 """
-CS0 -> CS1 or CS0 | CS1
-CS1 -> CS2 and CS1 | CS2
-CS2 -> not C0 | C0
+SOPLogic -> MinTerm or SOPLogic | MinTerm
+MinTerm -> LogicLiteral and MinTerm | LogicLiteral
+LogicLiteral -> not Comparison | Comparison
 """
 
-class CS0(BinOp):
-    name = "CS0"
+class SOPLogic(BinaryOperation):
+    name = "SOPLogic"
     opname = "or"
-    def duplicate(self):return CS0()
-    def other(self):return CS1()
+    def duplicate(self):return SOPLogic()
+    def other(self):return MinTerm()
     def op(self,x,y):return x or y
 
-class CS1(BinOp):
-    name = "CS1"
+class MinTerm(BinaryOperation):
+    name = "MinTerm"
     opname = "and"
-    def duplicate(self):return CS1()
-    def other(self):return CS2()
+    def duplicate(self):return MinTerm()
+    def other(self):return LogicLiteral()
     def op(self,x,y):return x and y
 
-class CS2(UnOp):
-    name = "CS2"
+class LogicLiteral(UnaryOperation):
+    name = "LogicLiteral"
     opname = "not"
-    def other(self):return C0()
+    def other(self):return Comparison()
     def op(self,x):return not x
 
 """
-C0 -> C0 == E0
-C0 -> C0 >  E0
-C0 -> C0 <  E0
-C0 -> C0 >= E0
-C0 -> C0 <= E0
-C0 -> C0 != E0
+Comparison -> Expression == Expression
+Comparison -> Expression >  Expression
+Comparison -> Expression <  Expression
+Comparison -> Expression >= Expression
+Comparison -> Expression <= Expression
+Comparison -> Expression != Expression
 """
 
-class C0(MultiBinOp):
-    name = "E0"
+class Comparison(MultipleBinaryOperation):
+    name = "Comparison"
     opnames = ["==",">","<",">=","<=","!="]
     left_associative = True
-    def duplicate(self):return C0()
-    def other(self):return E0()
+    def duplicate(self):return Expression()
+    def other(self):return Expression()
     def op(self,x,y,operation):
         if operation == "==" : return x == y
         if operation == ">" : return x > y
@@ -882,34 +952,34 @@ class C0(MultiBinOp):
 
 
 """
-E0 -> E0 + E2
-E0 -> E0 - E2
+Expression -> Expression + Term
+Expression -> Expression - Term
 """
 
-class E0(MultiBinOp):
-    name = "E0"
+class Expression(MultipleBinaryOperation):
+    name = "Expression"
     opnames = ["+","-"]
     left_associative = True
-    def duplicate(self):return E0()
-    def other(self):return E2()
+    def duplicate(self):return Expression()
+    def other(self):return Term()
     def op(self,x,y,operation):
         if operation == "+" : return x+y
         if operation == "-" : return x-y
         else:print("This is not good")
 
 """
-E2 -> E2 * E4
-E2 -> E2 / E4
-E2 -> E2 // E4 | E2 div E4
-E2 -> E2 % E4 | E2 mod E4
+Term -> Term * ExponentTower
+Term -> Term / ExponentTower
+Term -> Term // ExponentTower | Term div ExponentTower
+Term -> Term % ExponentTower | Term mod ExponentTower
 """
 
-class E2(MultiBinOp):
-    name = "E0"
+class Term(MultipleBinaryOperation):
+    name = "Term"
     opnames = ["*","/","//","%","mod","div"]
     left_associative = True
-    def duplicate(self):return E2()
-    def other(self):return E4()
+    def duplicate(self):return Term()
+    def other(self):return ExponentTower()
     def op(self,x,y,operation):
         if operation == "*" : return x*y
         if operation == "/" : return x/y
@@ -920,37 +990,29 @@ class E2(MultiBinOp):
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
 """
-E4 -> E7 ** E4
+ExponentTower -> SignedValue ** ExponentTower
 """
 
-# class E4(BinOp):
-#     name = "E4"
-#     opname = "**"
-#     left_associative =False
-#     def duplicate(self):return E4()
-#     def other(self):return E7()
-#     def op(self,x,y):return x ** y
-
-class E4(MultiBinOp):
-    name = "E4"
+class ExponentTower(MultipleBinaryOperation):
+    name = "ExponentTower"
     opnames = ["**","^"]
     left_associative = False
-    def duplicate(self):return E4()
-    def other(self):return E7()
+    def duplicate(self):return ExponentTower()
+    def other(self):return SignedValue()
     def op(self,x,y,operation):
         if operation == "**" : return x**y
         if operation == "^" : return x**y
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
 
-class E7(UnOp):
-    name = "E7"
+class SignedValue(UnaryOperation):
+    name = "SignedValue"
     opname = "-"
-    def other(self):return E8()
+    def other(self):return EnclosedValues()
     def op(self,x):return -x
 
-class E8(Node):
-    name = "E8"
+class EnclosedValues(Node):
+    name = "EnclosedValues"
     def parse(self,s:list):
         self.value = s
         n = len(s)
@@ -959,18 +1021,18 @@ class E8(Node):
             assert s[-1][1] == ")",f"syntax error in {s}"
             Left =Token("(")
             Right =Token(")")
-            Middle = CSV()
+            Middle = CommaSeparatedValues()
             Middle.parse(s[1:-1])
             self.children = [Left,Middle,Right]
         elif s[0][1] == "[":
             assert s[-1][1] == "]",f"syntax error in {s}"
             Left =Token("[")
             Right =Token("]")
-            Middle = CSV()
+            Middle = CommaSeparatedValues()
             Middle.parse(s[1:-1])
             self.children = [Left,Middle,Right]
         else:
-            child = E9()
+            child = Value()
             child.parse(s)
             self.children = [child]
     def eval(self):
@@ -985,8 +1047,8 @@ class E8(Node):
                 elif not isinstance(x,list):x = array([x])
                 return array(x)
 
-class E9(Node):
-    name = "E9"
+class Value(Node):
+    name = "Value"
     def parse(self,s):
         self.value = s
         n = len(s)
@@ -997,13 +1059,13 @@ class E9(Node):
         elif n == 1 and x[0] == "str": t = Str(x[1])
         elif n == 1 and x[0] == "id": t = Id(x[1])
         elif x[1] == "alg":
-            t = Al()
+            t = Algorithm()
             t.parse(s)
         elif s[0][0] == "id" and s[1][1] == "(" and s[-1][1] == ")":
-            t =FC()
+            t =FunctionCall()
             t.parse(s)
         else:
-            t = V()
+            t = Assignable()
             t.parse(s)
         self.children = [t]
     def eval(self):
@@ -1011,8 +1073,8 @@ class E9(Node):
         child = self.children[0]
         return child.eval()
 
-class Al(Node):
-    name = "Al"
+class Algorithm(Node):
+    name = "Algorithm"
     def parse(self,s):
         self.value = s
         n = len(s)
@@ -1023,11 +1085,11 @@ class Al(Node):
         try:
             for i in range(2,n-1):
                 if s[i][1] == ")":
-                    right = F()
+                    right = Block()
                     res = right.parse(s[i+1:])
                     if isinstance(res,ValueError):raise ValueError("Function body wasn't parsed")
                     left = Token("alg")
-                    middle = ENV()
+                    middle = Environment()
                     middle.parse(s[1:i+1])
                     self.children = [left,middle,right]
                     return
@@ -1037,14 +1099,14 @@ class Al(Node):
         global SymbolsNeeded,SYMBOLSTACK
         kw,arg,f = self.children
         arg = arg.eval()
-        assert isinstance(f,F)
+        assert isinstance(f,Block)
         f.args = tuple(arg)
         S = SYMBOLSTACK[-1]
         f.env = {k:S[k] for k in S if k in SymbolsNeeded(f)}
         return f
 
-class ENV(Node):
-    name = "ENV"
+class Environment(Node):
+    name = "Environment"
     def parse(self,s):
         self.value = s
         n = len(s)
@@ -1068,14 +1130,11 @@ class ENV(Node):
     def eval(self):
         return [child.value for child in self.children[1:-1:2]]
 
-class CSV(Node):
-    name = "CSV"
+class CommaSeparatedValues(Node):
+    name = "CommaSeparatedValues"
     def parse(self,s):
         self.value = s
         n = len(s)
-        #assert s[0][1] == "("
-        #assert s[-1][1] == ")"
-        #children = [Token("(")]
         children = []
         stack = []
         for i in range(0,n):
@@ -1083,25 +1142,24 @@ class CSV(Node):
                 stack.append(s[i])
             else:
                 try:
-                    child = CS0()
+                    child = SOPLogic()
                     child.parse(stack)
                     children.append(child)
                     children.append(Token(","))
                     stack = []
                 except:stack.append(s[i])
         if stack:
-            child = CS0()
+            child = SOPLogic()
             child.parse(stack)
             children.append(child)
-        #children.append(Token(")"))
         self.children = children
     def eval(self,wrap=False):
         if not wrap and len(self.children) == 0:return None
         if not wrap and len(self.children) == 1:return self.children[0].eval()
         return  [x.eval() for x in self.children[::2]]
 
-class FC(Node):
-    name = "FC"
+class FunctionCall(Node):
+    name = "FunctionCall"
     def parse(self,s):
         self.value = s
         n = len(s)
@@ -1109,21 +1167,17 @@ class FC(Node):
         assert s[0][0] == "id"
         assert s[1][1] == "("
         assert s[-1][1] == ")"
-        right = CSV()
+        right = CommaSeparatedValues()
         right.parse(s[2:-1])
         left = Id(s[0][1])
         self.children = [left,Token("("),right,Token(")")]
     def eval(self):
         left,op,right,ed = self.children
         f = left.eval()
-        assert isinstance(f,F)
-        assert isinstance(right,CSV)
+        assert isinstance(f,Block)
+        assert isinstance(right,CommaSeparatedValues)
         SYMBOLS = DEFAULT_SYMBOLS.copy()
         SYMBOLSTACK.append(SYMBOLS)
-        #body1 = right.children[1]
-        #body2 = f.children[1]
-        #body1.eval()
-        #to_ret = body2.eval()
         args = right.eval(True)
         if args is None:args = []
         elif not isinstance(args,list):args = [args]
@@ -1132,8 +1186,8 @@ class FC(Node):
         del SYMBOLS
         return to_ret
 
-class V(Node):
-    name = "V"
+class Assignable(Node):
+    name = "Assignable"
     def parse(self,s):
         self.value = s
         n = len(s)
@@ -1146,7 +1200,7 @@ class V(Node):
             assert s[-1][1] == "]",s
             Left = Token("[")
             Right = Token("]")
-            Middle = E0()
+            Middle = Expression()
             Middle.parse(s[2:-1])
             self.children = [Id(x[1]),Left,Middle,Right]
     def eval(self):
@@ -1217,7 +1271,7 @@ if __name__ == "__main__":
     else:print(TokensToStr(lex(s,True,True),color =False))
     print("_"*50 + "\n")
     s = lex(s)
-    s0 = S0()
+    s0 = Statements()
     res = s0.parse(s)
     if isinstance(res,ValueError):
         if DEBUG_WITH_COLOR:print("\x1b[38;2;255;0;0mCompilation Error\x1b[0m")

@@ -7,7 +7,7 @@ let largest_prime = alg(N){
         if N mod p == 0 {
             N = N div p;
             biggest = p;
-            continue;
+            skipit;
         }
         p = p+1;
     }

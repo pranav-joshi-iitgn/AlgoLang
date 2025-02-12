@@ -15,7 +15,7 @@ if DEBUG_WITH_COLOR:print(HighLight(s))
 else:print(TokensToStr(lex(s,True,True),color =False))
 print("_"*50 + "\n")
 s = lex(s)
-s0 = S0()
+s0 = Statements()
 res = s0.parse(s)
 if isinstance(res,ValueError):
     if DEBUG_WITH_COLOR:print("\x1b[38;2;255;0;0mCompilation Error\x1b[0m")

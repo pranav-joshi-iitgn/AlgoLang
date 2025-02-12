@@ -15,8 +15,8 @@ keywords = [
     'in','and','or','not',
     "print",
     'run','list','return','alg',
-    'with','vec','plot','break',
-    'continue','mod','div','let'
+    'with','vec','plot','breakloop',
+    'skipit','mod','div','let'
 ]
 
 chartypes = [

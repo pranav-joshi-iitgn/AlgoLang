@@ -1,19 +1,19 @@
-let check = alg (x){
+let check = alg(x){
     let y = x;
     let n = 0;
     while y > 0 {
         n = n + 1;
-        y = y//10;
+        y = y div 10;
     } # n is number of digits
     let first;
     let last;
     while n>1 {
-        first = x // (10**(n-1));
+        first = x div (10**(n-1));
         last = x%10;
         if not (first==last){
             return 0;
         }
-        x = ((x %(10**(n-1)))//10);
+        x = ((x %(10**(n-1))) div 10);
         n = n -2;
     }
     return 1;
@@ -30,7 +30,7 @@ while x > 99 and x*990 > biggest {
             print (z,x,y);
             print nl;
             biggest = z;
-            break;
+            breakloop;
         }
         y = y - 11;
     }

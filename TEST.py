@@ -16,7 +16,7 @@ for i in range(1,10):
     except:
         print("lexing failed on",filename)
         continue
-    s0 = S0()
+    s0 = Statements()
     try:res = s0.parse(s)
     except:
         print(filename,"crashed before giving a respnese")
