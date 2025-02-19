@@ -95,9 +95,13 @@ class Str(Token):
     name = "str"
     Type = str
     def __init__(self,value):
-        assert value[0] == '"'
-        assert value[-1] == '"'
-        self.value = literal_eval(value)
+        assert (
+            (value[0] == '"' and value[-1] == '"')
+            or
+            (value[0] == "'" and value[-1] == "'")
+        ), "Strings must be enclosed in quotes"
+        #self.value = literal_eval(value)
+        self.value = value[1:-1]
         self.name = self.value
     def eval(self):
         return self.value
@@ -119,8 +123,7 @@ class Id(Token):
             if x in SYMBOLS:
                 if SYMBOLS[x] is None: raise ValueError(f"{x} is not assigned yet")
                 return SYMBOLS[x]
-        print(x,"is not defined")
-        raise ValueError("undefined variable")
+        raise ValueError(f"undefined variable {x}")
 
 class Block(Node):
     """
@@ -661,6 +664,7 @@ class SingleStatement(Node):
         elif s[0][1] == "breakloop":left = Break()
         elif s[0][1] == "skipit":left = Continue()
         elif s[0][1] == "let":left = Definition()
+        elif s[0][1] == "delete":left = Deletion()
         else:left = Assignment()
         try:res = left.parse(s[:-1])
         except:return ValueError(on_wrong)
@@ -872,7 +876,7 @@ class RunStatement(Node):
         assert n == 4 or n==2
         Fun = L[1]
         f = Fun.eval()
-        assert isinstance(f,Block)
+        assert isinstance(f,Block) or isinstance(f,SysCall)
         if n==4:
             Arg = L[3]
             arg = Arg.eval(True)
@@ -913,12 +917,16 @@ class ReturnStatement(Node):
 
 class Dictionary(Node):
     """
-    Initialises an empty dictionary for an already initialised variable, or location in list.
-    Example:
+    Initialises an empty dictionary for a new variable, or location in list.
+    Example 1:
     ```
-    let D;
     dict D;
     D["x"]=1;
+    ```
+    Example 2:
+    ```
+    let L = list 2;
+    dict L[0];
     ```
     """
     name:"Dictionary"
@@ -930,20 +938,27 @@ class Dictionary(Node):
         x = s[0]
         assert x[1] == "dict"
         Left = Token(x[1])
-        Right = Assignable()
-        try:res = Right.parse(s[1:])
-        except:return ValueError(on_wrong)
-        if isinstance(res,ValueError):return ValueError(on_wrong,res)
+        if n == 2:
+            if not s[1][0] == "id":return ValueError(on_wrong)
+            Right = Id(s[1][1])
+        else:
+            Right = Assignable()
+            try:res = Right.parse(s[1:])
+            except:return ValueError(on_wrong)
+            if isinstance(res,ValueError):return ValueError(on_wrong,res)
         self.children = [Left,Right]
     def eval(self):
         L = self.children
         n = len(L)
         assert n == 2
-        L[1].update(dict())
+        if isinstance(L[1],Id):
+            SYMBOLS = SYMBOLSTACK[-1]
+            SYMBOLS[L[1].name] = {}
+        else : L[1].update(dict())
 
 class SOPLogic(BinaryOperation):
     """
-    SOPLogic -> MinTerm or SOPLogic | MinTerm
+    SOPLogic -> MinTerm `or` SOPLogic | MinTerm
     """
     name = "SOPLogic"
     opname = "or"
@@ -1089,7 +1104,7 @@ class EnclosedValues(Node):
             if L[0].value == "(":return L[1].eval()
             elif L[0].value == "[":
                 x = L[1].eval()
-                if x is None:return array()
+                if x is None:return array([])
                 elif not isinstance(x,list):x = array([x])
                 return array(x)
 
@@ -1153,7 +1168,7 @@ class Algorithm(Node):
                     res = right.parse(s[i+1:])
                     if isinstance(res,ValueError):raise ValueError("Function body wasn't parsed")
                     left = Token("alg")
-                    middle = Environment()
+                    middle = Arguments()
                     middle.parse(s[1:i+1])
                     self.children = [left,middle,right]
                     return
@@ -1169,13 +1184,13 @@ class Algorithm(Node):
         f.env = {k:S[k] for k in S if k in SymbolsNeeded(f)}
         return f
 
-class Environment(Node):
+class Arguments(Node):
     """
     Comma Separated Identifiers (not values).
     This returns a list of names (not values) of identifiers on `eval`
     Mainly used for algorithm definition
     """
-    name = "Environment"
+    name = "Arguments"
     def parse(self,s):
         self.value = s
         n = len(s)
@@ -1250,7 +1265,7 @@ class FunctionCall(Node):
     def eval(self):
         left,op,right,ed = self.children
         f = left.eval()
-        assert isinstance(f,Block)
+        assert isinstance(f,Block) or isinstance(f,SysCall), f"{left.name} is not callable"
         assert isinstance(right,CommaSeparatedValues)
         SYMBOLS = DEFAULT_SYMBOLS.copy()
         SYMBOLSTACK.append(SYMBOLS)
@@ -1259,8 +1274,17 @@ class FunctionCall(Node):
         elif not isinstance(args,list):args = [args]
         to_ret = f.eval(args)
         SYMBOLSTACK.pop()
-        del SYMBOLS
         return to_ret
+
+class SysCall:
+    def __init__(self,name,f):
+        self.name = name
+        self.f = f
+    def eval(self,args):
+        try: return self.f(*args)
+        except Exception as e:
+            raise ValueError(f"Error in {self.name} : {e}")
+
 
 class Assignable(Node):
     """
@@ -1312,13 +1336,127 @@ class Assignable(Node):
             SYMBOLS[x][ind] = value
         else:raise ValueError("This shouldn't be happening")
 
+class Deletion(Node):
+    """
+    Deletes a variable from a dictionary
+    Example:
+    ```
+    dict D;
+    D["x"] = 1;
+    delete "x" from D;
+    ```
+    """
+    name = "Delete"
+    def parse(self,s):
+        self.value = s
+        on_wrong = "incorrect delete statement :\n" + TokensToStr(s,DEBUG_WITH_COLOR)
+        n = len(s)
+        if not n == 4 : return ValueError(on_wrong)
+        if not s[0][1] == "delete" : return ValueError(on_wrong)
+        if not s[1][0] == "str" : return ValueError(on_wrong)
+        if not s[2][1] == "from" : return ValueError(on_wrong)
+        if not s[3][0] == "id" : return ValueError(on_wrong)
+        self.children = [Token("delete"),Str(s[1][1]),Token("from"),Id(s[3][1])]
+    def eval(self):
+        L = self.children
+        x = L[3].name
+        if x in RESTRICTED:raise ValueError(f"trying to delete read only variable {x}")
+        x = L[3].eval()
+        if isinstance(x,ValueError):raise x
+        if not isinstance(x,dict):raise ValueError(f"trying to delete from a non-dictionary {x}")
+        key = L[1].eval()
+        if key in x:x.pop(key)
+        else:raise ValueError(f"key {key} not found in {x}")
+
+
+def TakeIn(prompt:str=""):
+    """
+    Takes in input from the user
+    """
+    global DEBUG_WITH_COLOR
+    if DEBUG_WITH_COLOR:prompt = prompt + "\x1b[38;2;0;100;255m\n> \x1b[38;2;0;255;0m"
+    x = input(prompt)
+    print("\x1b[0m")
+    try:return int(x)
+    except:
+        try:return float(x)
+        except:return x
+
+def PushIn(L:list,x):
+    """
+    Pushes a new element into a list
+    """
+    if isinstance(L,list):L.append(x)
+    else:raise ValueError(f"trying to push into a non-list {L}")
+
+def PopOut(L,i=0):
+    """
+    Pops the last element from a list
+    """
+    if isinstance(L,list):
+        if i >= len(L):raise ValueError(f"trying to pop and index not present in {L}")
+        else : return L.pop()
+    elif isinstance(L,dict):
+        if i not in L:raise ValueError(f"trying to pop and index not present in {L}")
+        else : return L.pop(i)
+    else:raise ValueError(f"trying to pop from a non-list {L}")
+
+def GetLength(L):
+    """
+    Returns the length of a list
+    """
+    if isinstance(L,list) or isinstance(L,dict):return len(L)
+    if isinstance(L,ndarray):return L.shape[0]
+    else:raise ValueError(f"trying to get length of a non-list {L}")
+
+def GetKeys(L):
+    """
+    Returns the keys of an iterable
+    """
+    if isinstance(L,dict):return list(L.keys())
+    elif isinstance(L,list):return list(range(len(L)))
+    elif isinstance(L,ndarray):return list(range(L.shape[0]))
+    else:raise ValueError(f"trying to get keys of a non-dictionary {L}")
+
+def ReadFile(path):
+    """
+    Reads the content of a file
+    """
+    try:
+        f = open(path)
+        s = f.read()
+        f.close()
+        return s
+    except:return ValueError(f"couldn't read from {path}")
+
+def WriteFile(path,s=""):
+    """
+    Writes the content to a file
+    """
+    try:
+        f = open(path,'w')
+        f.write(s)
+        f.close()
+        return 1
+    except:return ValueError(f"couldn't write to {path}")
+
 DEFAULT_SYMBOLS = {
     "nl":"\n",
     "tab":"\t",
     "LASTCONDITION":True,
     "true":True,
     "false":False,
-    "null":None
+    "null":None,
+    "input":SysCall("input",TakeIn),
+    "int":SysCall("int",int),
+    "float":SysCall("float",float),
+    "str":SysCall("str",lambda x:str(to_tuple(x))),
+    "push":SysCall("push",PushIn),
+    "pop":SysCall("pop",PopOut),
+    "len":SysCall("len",GetLength),
+    "keys":SysCall("keys",GetKeys),
+    "read":SysCall("read",ReadFile),
+    "write":SysCall("write",WriteFile),
 }
 
 RESTRICTED = set(DEFAULT_SYMBOLS.keys())
@@ -1336,6 +1474,8 @@ def PrintError(Err):
     PrintError(Err)
 
 def RunPretty(s,vis=False):
+    global TESTING,SYMBOLSTACK,DEFAULT_SYMBOLS
+    SYMBOLSTACK = [DEFAULT_SYMBOLS.copy()]
     print("_"*50 + "\n")
     print("Program")
     print("_"*50 + "\n")
@@ -1378,9 +1518,10 @@ def RunFilePretty(filename,vis=False):
     RunPretty(s,vis)
 
 def TestFile(filename):
-    global TESTING
+    global TESTING,SYMBOLSTACK,DEFAULT_SYMBOLS
     old_TESTING = TESTING
     TESTING = True
+    SYMBOLSTACK = [DEFAULT_SYMBOLS.copy()]
     try:file = open(filename,'r')
     except:
         print(filename,"not found in this directory")
@@ -1407,8 +1548,8 @@ def TestFile(filename):
         TESTING = old_TESTING
         return
     try:s0.eval()
-    except:
-        print("Run-time error in",filename)
+    except Exception as e:
+        print("Run-time error in",filename,":",e)
         TESTING = old_TESTING
         return
     print(filename,"ran")

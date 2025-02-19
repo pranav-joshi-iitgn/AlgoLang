@@ -5,8 +5,7 @@ brak = r"()[]{};,"
 op1 = "+-<>*/"
 op2 = "%!/^"
 equal = "="
-doublequotes = '"'
-singlequotes = "'"
+quotes = '"'
 spaces = " \t"
 comS = "#"
 newline = "\n\r"
@@ -22,7 +21,7 @@ keywords = [
 
 chartypes = [
     digits,alphas,dot,brak,
-    op1,op2,equal,doublequotes,singlequotes,
+    op1,op2,equal,quotes,
     spaces,newline,comS
 ]
 
@@ -31,26 +30,25 @@ def get_char_type(c):
     assert len(c)==1
     for i,T in enumerate(chartypes):
         if c in T:return i
-    else:return 12
+    else:return 11
 
 DFA = {
-#           0-9         a-Z,_   .           ()[]{};,        +,-,<,>,*,/     %,!,:   =       "       '          space   \n      #       unk
-"":       [ "int",      "id",   "float",    "brak",         "op1",          "op2",  "op2",  "\"str","\'str",   None,   None,   "com_", False,  ],
-"\"str":  [ "\"str",    "\"str","\"str",    "\"str",        "\"str",        "\"str","\"str","str",  "\"str",   "\"str","\"str","\"str","\"str", ],
-"\'str":  [ "\'str",    "\'str","\'str",    "\'str",        "\'str",        "\'str","\'str","\'str","str",     "\'str","\'str","\'str","\'str", ],
-"str":    [ None,       None,   None,       None,           None,           None,   None,   None,   None,      None,   None,   None,   False,  ],
-"int":    [ "int",      None,   "float",    None,           None,           None,   None,   None,   None,      None,   None,   None,   False,  ],
-"float":  [ "float",    False,  False,      None,           None,           None,   None,   None,   None,      None,   None,   None,   False,  ],
-"id":     [ "id",       "id",   "id.",      None,           None,           None,   None,   None,   None,      None,   None,   None,   False,  ],
-"id.":    [ False,      "id",   False,      False,          False,          False,  False,  False,  False,     False,  False,  False,  False,  ],
-"brak":   [ None,       None,   None,       None,           None,           None,   None,   None,   None,      None,   None,   None,   False,  ],
-"op1":    [ None,       None,   None,       None,           "check",        None,   "op1=", None,   None,      None,   None,   None,   False,  ],
-"op2":    [ None,       None,   None,       None,           None,           None,   "op2=", None,   None,      None,   None,   None,   False,  ],
-"op12":   [ None,       None,   None,       None,           None,           None,   None,   None,   None,      None,   None,   None,   False,  ],
-"op1=":   [ None,       None,   None,       None,           None,           None,   None,   None,   None,      None,   None,   None,   False,  ],
-"op2=":   [ None,       None,   None,       None,           None,           None,   None,   None,   None,      None,   None,   None,   False,  ],
-"com_":   [ "com_",     "com_", "com_",     "com_",         "com_",         "com_", "com_", "com_", "com_",    "com_", "com",  "com_", "com_", ],
-"com":    [ None,       None,   None,       None,           None,           None,   None,   None,   None,      None,   None,   None,   False,  ],
+#           0-9         a-Z,_   .           ()[]{};,        +,-,<,>,*,/     %,!,:   =       "           space   \n      #       unk
+"":       [ "int",      "id",   "float",    "brak",         "op1",          "op2",  "op2",  "str_",     None,   None,   "com_", False,  ],
+"str_":   [ "str_",     "str_", "str_",     "str_",         "str_",         "str_", "str_", "str",      "str_", "str_", "str_", "str_", ],
+"str":    [ None,       None,   None,       None,           None,           None,   None,   None,       None,   None,   None,   False,  ],
+"int":    [ "int",      None,   "float",    None,           None,           None,   None,   None,       None,   None,   None,   False,  ],
+"float":  [ "float",    False,  False,      None,           None,           None,   None,   None,       None,   None,   None,   False,  ],
+"id":     [ "id",       "id",   "id.",      None,           None,           None,   None,   None,       None,   None,   None,   False,  ],
+"id.":    [ False,      "id",   False,      False,          False,          False,  False,  False,      False,  False,  False,  False,  ],
+"brak":   [ None,       None,   None,       None,           None,           None,   None,   None,       None,   None,   None,   False,  ],
+"op1":    [ None,       None,   None,       None,           "check",        None,   "op1=", None,       None,   None,   None,   False,  ],
+"op2":    [ None,       None,   None,       None,           None,           None,   "op2=", None,       None,   None,   None,   False,  ],
+"op12":   [ None,       None,   None,       None,           None,           None,   None,   None,       None,   None,   None,   False,  ],
+"op1=":   [ None,       None,   None,       None,           None,           None,   None,   None,       None,   None,   None,   False,  ],
+"op2=":   [ None,       None,   None,       None,           None,           None,   None,   None,       None,   None,   None,   False,  ],
+"com_":   [ "com_",     "com_", "com_",     "com_",         "com_",         "com_", "com_", "com_",     "com_", "com",  "com_", "com_", ],
+"com":    [ None,       None,   None,       None,           None,           None,   None,   None,       None,   None,   None,   False,  ],
 }
 
 def lex(s:str,keep_spaces = False,keep_comments = False):

@@ -1,0 +1,7 @@
+let s = read("sample13.txt");
+print s;
+let rc = write("sample13.txt",s);
+print(nl);
+if rc == 1 {
+print("written");
+}

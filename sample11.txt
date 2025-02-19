@@ -1,0 +1,8 @@
+dict x;
+x["a"] = 1;
+x["b"] = 2;
+delete "a" from x;
+print x;
+let L = list 2;
+dict L[0];
+print L[0];
