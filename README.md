@@ -11,4 +11,5 @@ python3 RUN.py sample7.txt
 
 Output:
 
-![image](https://github.com/user-attachments/assets/1b22e55e-2d36-4f43-8ed9-8ad318d6e29f)
+![image](https://github.com/user-attachments/assets/8ec1abb5-a396-4679-b6b2-e1d7a451d207)
+
