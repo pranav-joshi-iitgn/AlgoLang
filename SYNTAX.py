@@ -143,6 +143,8 @@ class Id(Token):
                 if SYMBOLS[x] is None: raise ValueError(f"{x} is not assigned yet")
                 return SYMBOLS[x]
         raise ValueError(f"undefined variable {x}")
+    
+    """
     def MIPS(self):
         x = self.value
         SYMBOLS = SYMBOLSTACK[-1]
@@ -155,6 +157,29 @@ class Id(Token):
                 f"lw $t1,0($t0)",
                 "sw $t1,0($s1)"
             ])
+        raise RuntimeError(f"variable {x} not found in any scope")
+    """
+
+    def MIPS(self):
+        x = self.value
+        N = len(SYMBOLSTACK)
+        code = [
+            f"# getting {self.name}",
+            "add $t0,$s0,$zero",
+        ]
+        for lev in range(N-1,-1,-1):
+            SYMBOLS = SYMBOLSTACK[lev]
+            if x in SYMBOLS:
+                v = SYMBOLS[x]
+                code.extend([
+                    f"addi $t0,$t0,{-4*v}",
+                    "addi $s1,$s1,-4",
+                    f"lw $t1,0($t0)",
+                    "sw $t1,0($s1)"
+                ])
+                return "\n".join(code)
+            else:
+                code.append("lw $t0,0($t0)")
         raise RuntimeError(f"variable {x} not found in any scope")
 
 class Block(Node):
@@ -334,6 +359,23 @@ class List(UnaryOperation):
         if isinstance(x,int):return [None]*x
         if isinstance(x,list):return x
         if isinstance(x,ndarray):return list(x)
+
+    def MIPS(self):
+        L = self.children
+        n = len(L)
+        if n > 2:raise RuntimeError("`list` keyword takes in an integer expression")
+        right = L[1]
+        right = right.MIPS()
+        return "\n".join([
+            right,
+            "",
+            "# list",
+            "add $t0,$s5,$zero",
+            "lw $t1,0($s1)",
+            "sll $t1,$t1,2",
+            "add $s5,$s5,$t1",
+            "sw $t0,0($s1)",
+        ])
 
 class Vector(UnaryOperation):
     """
@@ -1376,28 +1418,28 @@ class Term(MultipleBinaryOperation):
         ]),
         "/":"\n".join([
             "div $t1,$t2",
-            "mfhi $t1",
-            "mflo $t2",
+            "mfhi $t2",
+            "mflo $t1",
         ]),
         "//":"\n".join([
             "div $t1,$t2",
-            "mfhi $t1",
-            "mflo $t2",
+            "mfhi $t2",
+            "mflo $t1",
         ]),
         "%":"\n".join([
             "div $t1,$t2",
-            "mflo $t1",
-            "mfhi $t2",
+            "mflo $t2",
+            "mfhi $t1",
         ]),
         "div":"\n".join([
             "div $t1,$t2",
-            "mfhi $t1",
-            "mflo $t2",
+            "mfhi $t2",
+            "mflo $t1",
         ]),
         "mod":"\n".join([
             "div $t1,$t2",
-            "mflo $t1",
-            "mfhi $t2",
+            "mflo $t2",
+            "mfhi $t1",
         ]),
     }
 
@@ -1563,7 +1605,7 @@ class Algorithm(Node):
         return f
 
     def MIPS(self):
-        global labels,SYMBOLSTACK
+        global labels,SYMBOLSTACK,SymbolsNeeded
         kw,arg,f = self.children
         SYMBOLSTACK.append({})
         arg = arg.MIPS()
@@ -1817,9 +1859,9 @@ class Assignable(Node):
                 "",
                 "lw $t2,0($s1)", # load index
                 "sll $t2,$t2,2", # t2 = t2*4
-                f"addi $t0,$s0,{-4*v}", # load variable address
+                f"lw $t0,{-4*v}($s0)", # load pointer value
                 "add $t0,$t0,$t2", # get address
-                "lw $t1,0($t0)", # get value at address
+                "lw $t1,0($t0)", # get value at index
                 "sw $t1,0($s1)" # replace index on stack with value
             ])
         else:
@@ -1837,7 +1879,7 @@ class Assignable(Node):
                 "lw $t2,0($s1)",# load index
                 "sll $t2,$t2,2",# t2=t2*4
                 "lw $t1,4($s1)",# load value to be assignment
-                f"addi $t0,$s0,{-4*v}",# load variable address
+                f"lw $t0,{-4*v}($s0)",# load pointer
                 "add $t0,$t0,$t2",# get address on memory location
                 "sw $t1,0($t0)",# store value to address
                 "addi $s1,$s1,8",#clear both index and value
@@ -1973,6 +2015,8 @@ def set_defaults(D:dict):
 RESTRICTED = set(DEFAULT_SYMBOLS.keys())
 
 SYMBOLSTACK = [DEFAULT_SYMBOLS.copy()]
+
+# FUNCTIONSTACK = [(-1,"main")] # Not in usage. I was going to use this to avoid more stacks upon self recursion.
 
 def set_symbolstack(L:list):
     global SYMBOLSTACK

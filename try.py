@@ -27,7 +27,8 @@ mips_code = "\n".join([
     "jr $ra",
     "",
     "_start:",
-    "addi $s0,$zero,1024", # make some space
+    "li $s0,0x40000000", # make some space
+    "li $s5,0x40000004", # This is our heap pointer
     "",
     mips_code,
     "",
