@@ -7,6 +7,10 @@ from numpy import * #for vectors
 from graphviz import Digraph
 Graph = Digraph("AST")
 cur_node = 0
+labels = 0
+
+# MIPS code is supported by this simulator :
+# https://cpulator.01xz.net/?sys=mipsr5-spim
 
 # settings
 DEBUG_WITH_COLOR = False
@@ -57,6 +61,13 @@ class Node:
             cid = child.PlotTree()
             return cid
 
+    def MIPS(self):
+        L = self.children
+        n = len(L)
+        if n==0:return ""
+        if n==1:return L[0].MIPS()
+        raise RuntimeError(f"MIPS code generation not implemented for {self.name} yet")
+
 class Token:
     """
     Base class for terminals
@@ -85,6 +96,13 @@ class Int(Number):
     name = "int"
     Type = int
     def eval(self):return int(self.value)
+
+    def MIPS(self):
+        return "\n".join([
+            "addi $s1,$s1,-4",
+            f"addi $t1,$zero,{self.value}",
+            "sw $t1,0($s1)"
+        ])
 
 class Float(Number):
     name = "float"
@@ -124,6 +142,18 @@ class Id(Token):
                 if SYMBOLS[x] is None: raise ValueError(f"{x} is not assigned yet")
                 return SYMBOLS[x]
         raise ValueError(f"undefined variable {x}")
+    def MIPS(self):
+        x = self.value
+        SYMBOLS = SYMBOLSTACK[-1]
+        if x in SYMBOLS:
+            v = SYMBOLS[x] # this should be added to $s0 to get address
+            return "\n".join([
+                f"addi $t0,$s0,{-4*v}",
+                "addi $s1,$s1,-4",
+                f"lw $t1,0($t0)",
+                "sw $t1,0($s1)"
+            ])
+        raise RuntimeError(f"variable {x} not found in any scope")
 
 class Block(Node):
     """
@@ -259,6 +289,21 @@ class UnaryOperation(Node):
             return self.op(right)
         else: raise ValueError("This isn't good")
 
+    def MIPS(self):
+        L = self.children
+        n = len(L)
+        assert n > 0
+        if n == 1:return L[0].MIPS()
+        elif n == 2:
+            old = L[1].MIPS()
+            return "\n".join([
+                old,
+                "",
+                "lw $t1,0($s1)",
+                self.mips_op,
+                "sw $t1,0($s1)"
+            ])
+
 class List(UnaryOperation):
     """
     Example:
@@ -346,6 +391,26 @@ class BinaryOperation(Node):
         if len(L) == 1:return L[0].eval()
         elif len(L) == 3:return self.op(L[0].eval(),L[2].eval())
 
+    def MIPS(self):
+        L = self.children
+        n = len(L)
+        if n == 1: return L[0].MIPS()
+        assert n == 3
+        if self.mips_op is None:raise RuntimeError(f"{self.name} is not implemented yet :(")
+        old1 =  L[0].MIPS()
+        old2 = L[2].MIPS()
+        return "\n".join([
+            old1,
+            "",
+            old2,
+            "",
+            "lw $t2,0($s1)",
+            "addi $s1,$s1,4",
+            "lw $t1,0($s1)",
+            self.mips_op,
+            "sw $t1,0($s1)"
+        ])
+
 class MultipleBinaryOperation(Node):
     """
     Base class for non-terminals that implement
@@ -390,6 +455,27 @@ class MultipleBinaryOperation(Node):
         assert L
         if len(L) == 1:return L[0].eval()
         elif len(L) == 3:return self.op(L[0].eval(),L[2].eval(),L[1].name)
+
+    def MIPS(self):
+        L = self.children
+        n = len(L)
+        if n == 1: return L[0].MIPS()
+        assert n == 3
+        old1 =  L[0].MIPS()
+        old2 = L[2].MIPS()
+        middle = self.mips_op[L[1].value]
+        if middle is None:raise RuntimeError(f"{L[1].value} is not implemented yet :(")
+        return "\n".join([
+            old1,
+            "",
+            old2,
+            "",
+            "lw $t2,0($s1)",
+            "addi $s1,$s1,4",
+            "lw $t1,0($s1)",
+            middle,
+            "sw $t1,0($s1)"
+        ])
 
 class Statements(Node):
     """
@@ -459,6 +545,25 @@ class Statements(Node):
         for child in self.children:
             x = child.eval()
             if x is not None: return x
+    def MIPS(self,root=True,start_label = "",end_label = ""):
+        global SYMBOLSTACK
+        SYMBOLS = SYMBOLSTACK[-1]
+        L = self.children
+        n = len(L)
+        if n == 0:return ""
+        assert n == 2
+        code1 = L[0].MIPS(start_label,end_label)
+        code2 = L[1].MIPS(False,start_label,end_label)
+        if root:
+            code = [
+                "addi $t8,$zero,1",#This is permanently going to stay like this
+                "addi $t9,$zero,1",#make the LASTCONDITION to be true
+                "addi $s0,$zero,1024", # make some space
+                f"addi $s1,$s0,{-4*len(SYMBOLS)}",#make space for all the variables that will be used eventually
+                code1,code2,
+            ]
+        else:code = [code1,code2]
+        return "\n\n".join(code)
 
 class Loop(Node):
     """
@@ -511,6 +616,35 @@ class Loop(Node):
         else:SYMBOLS["LASTCONDITION"] = False
         if br <= 0 : print("broken while because it took over 10^9 loops")
 
+    def MIPS(self,start_label="",end_label=""):
+        global labels
+        L = self.children
+        assert len(L) == 3
+        condition = L[1]
+        code = L[2].children[1]
+        condition = condition.MIPS()
+        labels += 2
+        start_label = f"label{labels-1}"
+        end_label = f"label{labels}"
+        code = code.MIPS(False,start_label,end_label)
+        return "\n".join([
+            f"{start_label}: # while ",
+            "",
+            condition,
+            ""
+            "lw $t9,0($s1)",
+            "addi $s1,$s1,4",
+            "slt $t1,$zero,$t9",
+            "slt $t9,$t9,$zero",
+            "or $t9,$t9,$t1",
+            f"beq $t9,$zero,{end_label}",
+            "",
+            code,
+            "",
+            f"j {start_label}",
+            f"{end_label}: # end while",
+        ])
+
 class Break(Node):
     """
     Implements the `breakloop`
@@ -522,6 +656,8 @@ class Break(Node):
         self.children = [Token("breakloop")]
     def eval(self):
         return self
+    def MIPS(self,start_label="",end_label=""):
+        return f"j {end_label}"
 
 class Continue(Node):
     """
@@ -534,6 +670,8 @@ class Continue(Node):
         self.children = [Token("skipit")]
     def eval(self):
         return self
+    def MIPS(self,start_label="",end_label=""):
+        return f"j {start_label}"
 
 class IfStatement(Node):
     name = "If"
@@ -577,6 +715,29 @@ class IfStatement(Node):
             SYMBOLS["LASTCONDITION"] =True
             return to_ret
         else:SYMBOLS["LASTCONDITION"] =False
+
+    def MIPS(self,start_label="",end_label=""):
+        global labels
+        L = self.children
+        n = len(L)
+        assert n == 5
+        condition = L[1]
+        code = L[3]
+        SYMBOLS = SYMBOLSTACK[-1]
+        code = code.MIPS(False,start_label,end_label)
+        condition = condition.MIPS()
+        labels += 1
+        return "\n".join([
+            condition,
+            "",
+            "lw $t9,0($s1)",#get result of condition
+            "addi $s1,$s1,4",# delete a value
+            f"beq $t9,$zero,label{labels} # if",
+            "",
+            code,
+            "",
+            f"label{labels}: # end if",
+        ])
 
 class ElseIfStatement(Node):
     name = "ElseIfStatement"
@@ -623,6 +784,30 @@ class ElseIfStatement(Node):
         else:
             SYMBOLS["LASTCONDITION"] =False
 
+    def MIPS(self,start_label="",end_label=""):
+        global labels
+        L = self.children
+        n = len(L)
+        assert n == 5
+        condition = L[1]
+        code = L[3]
+        SYMBOLS = SYMBOLSTACK[-1]
+        code = code.MIPS(False,start_label,end_label)
+        condition = condition.MIPS()
+        labels += 1
+        return "\n".join([
+            condition,
+            "",
+            f"bne $t9,$zero,label{labels} # el..",
+            "lw $t9,0($s1)",#get result of condition
+            "addi $s1,$s1,4",# delete a value
+            f"beq $t9,$zero,label{labels} # ..if",
+            "",
+            code,
+            "",
+            f"label{labels}: # end elif",
+        ])
+
 class ElseStatement(Node):
     name = "ElseStatement"
     def parse(self,s:list):
@@ -646,6 +831,24 @@ class ElseStatement(Node):
         if SYMBOLS["LASTCONDITION"]:return
         SYMBOLS["LASTCONDITION"] = True
         return code.eval()
+
+    def MIPS(self,start_label="",end_label=""):
+        global labels
+        L = self.children
+        n = len(L)
+        assert n == 2
+        code = L[1].children[1]
+        code = code.MIPS(False)
+        labels += 1
+        return "\n".join([
+            f"bne $t9,$zero,label{labels} # else",
+            "",
+            code,
+            "",
+            f"label{labels}: # end else",
+            "addi $t9,$zero,1" # set LASTCONDITION to be true
+        ])
+
 
 class SingleStatement(Node):
     name = "SingleStatement"
@@ -674,6 +877,8 @@ class SingleStatement(Node):
         L = self.children
         assert len(L) == 2
         return L[0].eval()
+    def MIPS(self,start_label="",end_label=""):
+        return self.children[0].MIPS(start_label,end_label)
 
 class Definition(Node):
     """
@@ -720,6 +925,16 @@ class Definition(Node):
             SYMBOL[name] = value
         else: raise ValueError(f"n = {n} ..how?")
 
+    def MIPS(self,start_label="",end_label=""):
+        L = self.children
+        n = len(L)
+        SYMBOLS = SYMBOLSTACK[-1]
+        if n > 2:raise RuntimeError("definition with assignment not done in MIPS yet :(")
+        x = L[1].value # name of variable
+        if x in SYMBOLS : return f"# {x} is {-4*SYMBOLS[x]}($s0)"
+        SYMBOLS[x] = max(list(SYMBOLS.values()) + [0]) + 1
+        return f"# {x} is {-4*SYMBOLS[x]}($s0)"
+
 class Assignment(Node):
     """
     Updates the value of variable found in the innermost scope, till now.
@@ -757,11 +972,20 @@ class Assignment(Node):
         n = len(L)
         assert n == 3
         assert L[1].value == "="
-        #if isinstance(L[2],Block) and L[2].name == "Block":
-        #    L[0].update(L[2])
-        #else:
         value = L[2].eval()
         L[0].update(value)
+
+    def MIPS(self,start_label="",end_label=""):
+        L = self.children
+        n = len(L)
+        assert n == 3
+        ass = L[0].MIPS(True) # assigns 0($s1) to the value
+        val = L[2].MIPS() # actually computes the value
+        return "\n".join([
+            val,
+            "",
+            ass
+        ])
 
 class PrintStatement(Node):
     name:"PrintStatement"
@@ -966,6 +1190,8 @@ class SOPLogic(BinaryOperation):
     def other(self):return MinTerm()
     def op(self,x,y):return x or y
 
+    mips_op = "or $t1,$t1,$t2"
+
 class MinTerm(BinaryOperation):
     """
     MinTerm -> LogicLiteral and MinTerm | LogicLiteral
@@ -976,6 +1202,8 @@ class MinTerm(BinaryOperation):
     def other(self):return LogicLiteral()
     def op(self,x,y):return x and y
 
+    mips_op = "and $t1,$t1,$t2"
+
 class LogicLiteral(UnaryOperation):
     """
     LogicLiteral -> not Comparison | Comparison
@@ -984,6 +1212,8 @@ class LogicLiteral(UnaryOperation):
     opname = "not"
     def other(self):return Comparison()
     def op(self,x):return not x
+
+    mips_op = "sub $t1,$t8,$t1" # 1-t1
 
 class Comparison(MultipleBinaryOperation):
     """
@@ -1008,6 +1238,30 @@ class Comparison(MultipleBinaryOperation):
         if operation == "!=" : return x != y
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
+    mips_op = {
+        "==":"\n".join([
+                "slt $t3,$t1,$t2", # x < y
+                "slt $t2,$t2,$t1", # x > y
+                "or $t1,$t3,$t2", # (x<y) or (x>y)
+                "sub $t1,$t8,$t1" # 1-t1
+            ]),
+        ">":"slt $t1,$t2,$t1",
+        "<":"slt $t1,$t1,$t2",
+        ">=":"\n".join([
+                "slt $t1,$t1,$t2",
+                "sub $t1,$t8,$t1" # 1-t1
+            ]),
+        "<=":"\n".join([
+                "slt $t1,$t2,$t1",
+                "sub $t1,$t8,$t1" # 1-t1
+            ]),
+        "!=":"\n".join([
+                "slt $t3,$t1,$t2", # x < y
+                "slt $t2,$t2,$t1", # x > y
+                "or $t1,$t3,$t2", # (x<y) or (x>y)
+            ]),
+    }
+
 class Expression(MultipleBinaryOperation):
     """
     Expression -> Expression + Term
@@ -1022,6 +1276,11 @@ class Expression(MultipleBinaryOperation):
         if operation == "+" : return x+y
         if operation == "-" : return x-y
         else:print("This is not good")
+    
+    mips_op = {
+        "+":"add $t1,$t1,$t2",
+        "-":"sub $t1,$t1,$t2"
+    }
 
 class Term(MultipleBinaryOperation):
     """
@@ -1044,6 +1303,39 @@ class Term(MultipleBinaryOperation):
         if operation == "mod" : return x%y
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
+    mips_op = {
+        "*":"\n".join([
+            "mult $t1,$t2",
+            "mflo $t1",
+            "mfhi $t2",
+        ]),
+        "/":"\n".join([
+            "div $t1,$t2",
+            "mfhi $t1",
+            "mflo $t2",
+        ]),
+        "//":"\n".join([
+            "div $t1,$t2",
+            "mfhi $t1",
+            "mflo $t2",
+        ]),
+        "%":"\n".join([
+            "div $t1,$t2",
+            "mflo $t1",
+            "mfhi $t2",
+        ]),
+        "div":"\n".join([
+            "div $t1,$t2",
+            "mfhi $t1",
+            "mflo $t2",
+        ]),
+        "mod":"\n".join([
+            "div $t1,$t2",
+            "mflo $t1",
+            "mfhi $t2",
+        ]),
+    }
+
 class ExponentTower(MultipleBinaryOperation):
     """
     ExponentTower -> SignedValue ** ExponentTower
@@ -1057,6 +1349,11 @@ class ExponentTower(MultipleBinaryOperation):
         if operation == "**" : return x**y
         if operation == "^" : return x**y
         else:raise ValueError(f"unrecognised binary operation {operation}")
+    
+    mips_op = {
+        "**":None,
+        "^":None
+    }
 
 class SignedValue(UnaryOperation):
     """
@@ -1066,6 +1363,8 @@ class SignedValue(UnaryOperation):
     opname = "-"
     def other(self):return EnclosedValues()
     def op(self,x):return -x
+
+    mips_op = "sub $t1,$zero,$t1"
 
 class EnclosedValues(Node):
     """
@@ -1108,6 +1407,15 @@ class EnclosedValues(Node):
                 elif not isinstance(x,list):x = array([x])
                 return array(x)
 
+    def MIPS(self):
+        L = self.children
+        assert L
+        if len(L) == 1:return L[0].MIPS()
+        elif len(L) == 3:
+            if L[0].value == "(":return L[1].MIPS()
+            elif L[0].value == "[":
+                raise RuntimeError("`[]` not implemented yet :(")
+
 class Value(Node):
     name = "Value"
     def parse(self,s):
@@ -1133,6 +1441,11 @@ class Value(Node):
         assert len(self.children) == 1
         child = self.children[0]
         return child.eval()
+
+    def MIPS(self):
+        assert len(self.children) == 1
+        child = self.children[0]
+        return child.MIPS()
 
 def SymbolsNeeded(node):
     """
@@ -1242,6 +1555,13 @@ class CommaSeparatedValues(Node):
         if not wrap and len(self.children) == 1:return self.children[0].eval()
         return  [x.eval() for x in self.children[::2]]
 
+    def MIPS(self):
+        L = self.children
+        n = len(L)
+        if n == 0 : raise RuntimeError("empty `()` not implemented yet :(")
+        elif n == 1:return self.children[0].MIPS()
+        else : raise RuntimeError("`(...)` not implemented yet :(")
+
 class FunctionCall(Node):
     """
     Example:
@@ -1335,6 +1655,49 @@ class Assignable(Node):
             ind = L[2].eval()
             SYMBOLS[x][ind] = value
         else:raise ValueError("This shouldn't be happening")
+
+    def MIPS(self,up=False):
+        L = self.children
+        n = len(L)
+        assert n > 0
+        v = L[0].value
+        SYMBOLS = SYMBOLSTACK[-1]
+        if v not in SYMBOLS:raise RuntimeError(f"variable {v} not defined yet.")
+        v = SYMBOLS[v]
+        if not up: # we are not updating
+            if n == 1:return L[0].MIPS()
+            assert n == 4
+            getindex = L[2].MIPS()
+            return "\n".join([
+                getindex,
+                "",
+                "lw $t2,0($s1)", # load index
+                "sll $t2,$t2,2", # t2 = t2*4
+                f"addi $t0,$s0,{-4*v}", # load variable address
+                "add $t0,$t0,$t2", # get address
+                "lw $t1,0($t0)", # get value at address
+                "sw $t1,0($s1)" # replace index on stack with value
+            ])
+        else:
+            if n == 1:return "\n".join([
+                "lw $t1,0($s1)", # get value
+                f"addi $t0,$s0,{-4*v}", # load variable address
+                "sw $t1,0($t0)", # update the value at address
+                "addi $s1,$s1,4" # remove the variable
+            ])
+            assert n == 4
+            getindex = L[2].MIPS()
+            return "\n".join([
+                getindex,
+                "",
+                "lw $t2,0($s1)",# load index
+                "sll $t2,$t2,2",# t2=t2*4
+                "lw $t1,4($s1)",# load value to be assignment
+                f"addi $t0,$s0,{-4*v}",# load variable address
+                "add $t0,$t0,$t2",# get address on memory location
+                "sw $t1,0($t0)",# store value to address
+                "addi $s1,$s1,8",#clear both index and value
+            ])
 
 class Deletion(Node):
     """
@@ -1459,9 +1822,17 @@ DEFAULT_SYMBOLS = {
     "write":SysCall("write",WriteFile),
 }
 
+def set_defaults(D:dict):
+    global DEFAULT_SYMBOLS
+    DEFAULT_SYMBOLS = D
+
 RESTRICTED = set(DEFAULT_SYMBOLS.keys())
 
 SYMBOLSTACK = [DEFAULT_SYMBOLS.copy()]
+
+def set_symbolstack(L:list):
+    global SYMBOLSTACK
+    SYMBOLSTACK = L
 
 def PrintError(Err):
     assert isinstance(Err,ValueError),"Not an error"
