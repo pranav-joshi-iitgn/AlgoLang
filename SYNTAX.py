@@ -256,6 +256,11 @@ class Block(Node):
         if len(env) : s += "where\n" + env
         return s + "\n"
 
+    def MIPS(self):
+        body = self.children[1]
+        code = body.MIPS(True)
+        return code
+
 class UnaryOperation(Node):
     """
     Base class for all unary operations.
@@ -558,7 +563,6 @@ class Statements(Node):
             code = [
                 "addi $t8,$zero,1",#This is permanently going to stay like this
                 "addi $t9,$zero,1",#make the LASTCONDITION to be true
-                "addi $s0,$zero,1024", # make some space
                 f"addi $s1,$s0,{-4*len(SYMBOLS)}",#make space for all the variables that will be used eventually
                 code1,code2,
             ]
@@ -979,8 +983,14 @@ class Assignment(Node):
         L = self.children
         n = len(L)
         assert n == 3
+        val = L[2].MIPS()
+        if len(val) == 2:
+            code,lab = val
+            if len(L[0].children) > 1: raise RuntimeError("setting algorithm as element of list directly not allowed yet")
+            SYMBOLSTACK[-1][L[0].children[0].value] = lab
+            return code
+        #val = L[2].MIPS() # actually computes the value
         ass = L[0].MIPS(True) # assigns 0($s1) to the value
-        val = L[2].MIPS() # actually computes the value
         return "\n".join([
             val,
             "",
@@ -1114,6 +1124,24 @@ class RunStatement(Node):
         SYMBOLSTACK.pop()
         SYMBOLS = SYMBOLSTACK[-1]
 
+    def MIPS(self):
+        L = self.children
+        n = len(L)
+        if n > 2 : raise RuntimeError("running algorithm with arguments not available right now")
+        lab = L[1].eval()
+        return "\n".join([
+            "sw $ra,-4($s1)",
+            "sw $s0,-8($s1)",
+            "addi $s0,$s1,-8",
+            f"jal {lab}",
+            #"lw $t1,0($s1)",
+            "addi $s1,$s1,4",
+            "lw $ra,0($s1)",
+            #"sw $t1,0($s1)",
+            # commented out stuff is for returns, but run has no returns
+            "addi $s1,$s1,4" # only for `run`. Not for function calls
+        ])
+
 class ReturnStatement(Node):
     """
     These are the only kind of statements that return a value upon calling `eval`.
@@ -1138,6 +1166,20 @@ class ReturnStatement(Node):
         n = len(L)
         assert n == 2
         return L[1].eval()
+
+    def MIPS(self,start_label="",end_label=""):
+        val = self.children[1]
+        val = val.MIPS()
+        return "\n".join([
+            val,
+            "# return",
+            "lw $t0,0($s0)",
+            "lw $t1,0($s1)",
+            "sw $t1,0($s0)",
+            "add $s1,$s0,$zero",
+            "add $s0,$zero,$t0",
+            "jr $ra",
+        ])
 
 class Dictionary(Node):
     """
@@ -1497,6 +1539,28 @@ class Algorithm(Node):
         f.env = {k:S[k] for k in S if k in SymbolsNeeded(f)}
         return f
 
+    def MIPS(self):
+        global labels
+        kw,arg,f = self.children
+        code = f.MIPS()
+        labels += 2
+        start = f"label{labels-1}"
+        end = f"label{labels}"
+        return ("\n".join([
+            f"j {end} # skip function",
+            f"{start}:","",
+            code,"",
+            "lw $t0,0($s0)",
+            "lw $t1,0($s1)",
+            "sw $t1,0($s0)",
+            "add $s1,$s0,$zero",
+            "add $s0,$zero,$t0",
+            "jr $ra",
+            f"{end}: # end of function"
+        ]),start)
+
+
+
 class Arguments(Node):
     """
     Comma Separated Identifiers (not values).
@@ -1595,6 +1659,23 @@ class FunctionCall(Node):
         to_ret = f.eval(args)
         SYMBOLSTACK.pop()
         return to_ret
+
+    def MIPS(self):
+        L = self.children
+        lab = L[0].eval()
+        return "\n".join([
+            "sw $ra,-4($s1)",
+            "sw $s0,-8($s1)",
+            "addi $s0,$s1,-8",
+            f"jal {lab}",
+            "lw $t1,0($s1)",
+            "addi $s1,$s1,4",
+            "lw $ra,0($s1)",
+            "sw $t1,0($s1)",
+        ])
+        # ignoring arguments and scoping for now
+    
+
 
 class SysCall:
     def __init__(self,name,f):

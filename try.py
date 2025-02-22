@@ -22,6 +22,7 @@ mips_code = e0.MIPS()
 mips_code = "\n".join([
     ".global _start",
     "_start:",
+    "addi $s0,$zero,1024", # make some space
     "",
     mips_code,
     "",
