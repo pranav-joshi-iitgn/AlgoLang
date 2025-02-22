@@ -31,7 +31,10 @@ mips_code = "\n".join([
     "",
     mips_code,
     "",
-    "syscall 10", #This is the call to exit in this simulator : https://cpulator.01xz.net/?sys=mipsr5-spim
+    "# Exit",
+    "addi $v0,$zero,10",
+    "syscall",
+    #This is the call to exit in this simulator : https://cpulator.01xz.net/?sys=mipsr5-spim
 ])
 f = open("try.s",'w')
 f.write(mips_code)

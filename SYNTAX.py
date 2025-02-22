@@ -259,7 +259,9 @@ class Block(Node):
         return s + "\n"
 
     def MIPS(self):
+        global SYMBOLSTACK
         body = self.children[1]
+        SYMBOLS = SYMBOLSTACK[-1]
         code = body.MIPS(True)
         return code
 
@@ -1022,6 +1024,19 @@ class PrintStatement(Node):
         x = to_tuple(x)
         if isinstance(x,Block):x = x.prepr()
         if not TESTING:print(x,end = "")
+    
+    def MIPS(self,start_label="",end_label=""):
+        L = self.children
+        getval = L[1].MIPS()
+        return "\n".join([
+            getval,
+            "",
+            "# Print",
+            "addi $v0, $zero, 1",
+            "lw $a0, 0($s1)",
+            "syscall",
+            "addi $s1,$s1,4"
+        ])
 
 class PlotStatement(Node):
     name:"plot"
@@ -1548,13 +1563,15 @@ class Algorithm(Node):
         return f
 
     def MIPS(self):
-        global labels
+        global labels,SYMBOLSTACK
         kw,arg,f = self.children
+        SYMBOLSTACK.append({})
+        arg = arg.MIPS()
         code = f.MIPS()
         labels += 2
         start = f"label{labels-1}"
         end = f"label{labels}"
-        return "\n".join([
+        to_ret = "\n".join([
             "# Algorithm",
             f"jal pathfinder # find path of next line",
             f"addi $t1,$t1,16",
@@ -1562,7 +1579,7 @@ class Algorithm(Node):
             f"sw $t1,0($s1)",
             f"j {end} # skip function",
             f"{start}:","",
-            code,"",
+            arg,"",code,"",
             "lw $t0,0($s0)",
             "lw $t1,0($s1)",
             "sw $t1,0($s0)",
@@ -1571,6 +1588,8 @@ class Algorithm(Node):
             "jr $ra",
             f"{end}: # end of function"
         ])
+        SYMBOLSTACK.pop()
+        return to_ret
 
 
 
@@ -1604,6 +1623,16 @@ class Arguments(Node):
     def eval(self):
         return [child.value for child in self.children[1:-1:2]]
 
+    def MIPS(self):
+        global SYMBOLSTACK
+        SYMBOLS = SYMBOLSTACK[-1]
+        comments = []
+        for x in self.eval():
+            if x in SYMBOLS: continue
+            SYMBOLS[x] = max(list(SYMBOLS.values()) + [0]) + 1
+            comments.append(f"# {x} is {-4*SYMBOLS[x]}($s0)")
+        return "\n".join(comments)
+
 class CommaSeparatedValues(Node):
     name = "CommaSeparatedValues"
     def parse(self,s):
@@ -1632,12 +1661,12 @@ class CommaSeparatedValues(Node):
         if not wrap and len(self.children) == 1:return self.children[0].eval()
         return  [x.eval() for x in self.children[::2]]
 
-    def MIPS(self):
+    def MIPS(self,wrap = False):
         L = self.children
         n = len(L)
-        if n == 0 : raise RuntimeError("empty `()` not implemented yet :(")
-        elif n == 1:return self.children[0].MIPS()
-        else : raise RuntimeError("`(...)` not implemented yet :(")
+        if not wrap and n == 0 : raise RuntimeError("empty `()` not allowed here")
+        elif not wrap and n == 1:return self.children[0].MIPS()
+        else : return "\n\n".join([x.MIPS() for x in self.children[::2]])
 
 class FunctionCall(Node):
     """
@@ -1676,19 +1705,34 @@ class FunctionCall(Node):
     def MIPS(self):
         L = self.children
         getaddress = L[0].MIPS()
+        getargs = L[2].MIPS(True)
+        N = len(L[2].children[::2])
         return "\n".join([
             getaddress,
             "",
             "# function call",
-            "add $t2,$t1,$zero",
             "sw $ra,-4($s1)",
-            "sw $s0,-8($s1)",
-            "addi $s0,$s1,-8",
+            #"sw $s0,-8($s1)",
+            "addi $s1,$s1,-4",
+            "",
+            "# Getting Arguments",
+            "",
+            getargs, #assuming that every argument is only one word
+            "",
+            "# Making a stack frame",
+            f"addi $s1,$s1,{4*N}",
+            "lw $t2,4($s1)",
+            "lw $t1,0($s1)",
+            "sw $t1,4($s1)",
+            "sw $s0,0($s1)",
+            "add $s0,$s1,$zero",
+            f"addi $s1,$s1,{-4*N}",
+
             "jal pathfinder",
             "addi $ra,$t1,8",
             f"jr $t2",
             "lw $t1,0($s1)",
-            "addi $s1,$s1,8",
+            "addi $s1,$s1,4",
             "lw $ra,-4($s1)",
             "sw $t1,0($s1)",
         ])
