@@ -1733,7 +1733,7 @@ class FunctionCall(Node):
             f"jr $t2",
             "lw $t1,0($s1)",
             "addi $s1,$s1,4",
-            "lw $ra,-4($s1)",
+            "lw $ra,0($s1)",
             "sw $t1,0($s1)",
         ])
         # ignoring arguments and scoping for now
