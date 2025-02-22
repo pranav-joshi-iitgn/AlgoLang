@@ -1,9 +1,7 @@
 let f;
-f = alg (x,g){
-    if x <= 1 {
-        return 1;
-    }
-    return g(x-1) + g(x-2);
+let g;
+g = alg(x,f){
+    if x <=1 {return 1;}
+    return f(x-1,f) + f(x-2,f);
 };
-
-print f(2,f);
+print g(5,g); # prints the 5th fibonacci number, i.e. 8

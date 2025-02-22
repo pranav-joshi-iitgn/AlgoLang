@@ -9,9 +9,11 @@ addi $s0,$zero,1024
 
 addi $t8,$zero,1
 addi $t9,$zero,1
-addi $s1,$s0,-4
+addi $s1,$s0,-8
 
 # f is -4($s0)
+
+# g is -8($s0)
 
 # Algorithm
 jal pathfinder # find path of next line
@@ -22,7 +24,7 @@ j label3 # skip function
 label2:
 
 # x is -4($s0)
-# g is -8($s0)
+# f is -8($s0)
 
 addi $t8,$zero,1
 addi $t9,$zero,1
@@ -66,7 +68,7 @@ jr $ra
 
 label1: # end if
 
-# getting g
+# getting f
 addi $t0,$s0,-8
 addi $s1,$s1,-4
 lw $t1,0($t0)
@@ -95,23 +97,29 @@ lw $t1,0($s1)
 sub $t1,$t1,$t2
 sw $t1,0($s1)
 
+# getting f
+addi $t0,$s0,-8
+addi $s1,$s1,-4
+lw $t1,0($t0)
+sw $t1,0($s1)
+
 # Making a stack frame
-addi $s1,$s1,4
+addi $s1,$s1,8
 lw $t2,4($s1)
 lw $t1,0($s1)
 sw $t1,4($s1)
 sw $s0,0($s1)
 add $s0,$s1,$zero
-addi $s1,$s1,-4
+addi $s1,$s1,-8
 jal pathfinder
 addi $ra,$t1,8
 jr $t2
 lw $t1,0($s1)
 addi $s1,$s1,4
-lw $ra,-4($s1)
+lw $ra,0($s1)
 sw $t1,0($s1)
 
-# getting g
+# getting f
 addi $t0,$s0,-8
 addi $s1,$s1,-4
 lw $t1,0($t0)
@@ -140,20 +148,26 @@ lw $t1,0($s1)
 sub $t1,$t1,$t2
 sw $t1,0($s1)
 
+# getting f
+addi $t0,$s0,-8
+addi $s1,$s1,-4
+lw $t1,0($t0)
+sw $t1,0($s1)
+
 # Making a stack frame
-addi $s1,$s1,4
+addi $s1,$s1,8
 lw $t2,4($s1)
 lw $t1,0($s1)
 sw $t1,4($s1)
 sw $s0,0($s1)
 add $s0,$s1,$zero
-addi $s1,$s1,-4
+addi $s1,$s1,-8
 jal pathfinder
 addi $ra,$t1,8
 jr $t2
 lw $t1,0($s1)
 addi $s1,$s1,4
-lw $ra,-4($s1)
+lw $ra,0($s1)
 sw $t1,0($s1)
 
 lw $t2,0($s1)
@@ -181,12 +195,12 @@ label3: # end of function
 
 # Assignment
 lw $t1,0($s1)
-addi $t0,$s0,-4
+addi $t0,$s0,-8
 sw $t1,0($t0)
 addi $s1,$s1,4
 
-# getting f
-addi $t0,$s0,-4
+# getting g
+addi $t0,$s0,-8
 addi $s1,$s1,-4
 lw $t1,0($t0)
 sw $t1,0($s1)
@@ -197,13 +211,13 @@ addi $s1,$s1,-4
 
 # Getting Arguments
 
-# int 2
+# int 5
 addi $s1,$s1,-4
-addi $t1,$zero,2
+addi $t1,$zero,5
 sw $t1,0($s1)
 
-# getting f
-addi $t0,$s0,-4
+# getting g
+addi $t0,$s0,-8
 addi $s1,$s1,-4
 lw $t1,0($t0)
 sw $t1,0($s1)
@@ -221,7 +235,7 @@ addi $ra,$t1,8
 jr $t2
 lw $t1,0($s1)
 addi $s1,$s1,4
-lw $ra,-4($s1)
+lw $ra,0($s1)
 sw $t1,0($s1)
 
 # Print
