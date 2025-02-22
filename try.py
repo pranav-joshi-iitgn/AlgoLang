@@ -21,6 +21,11 @@ e0.parse(s)
 mips_code = e0.MIPS()
 mips_code = "\n".join([
     ".global _start",
+    "",
+    "pathfinder:",
+    "add $t1,$ra,$zero",
+    "jr $ra",
+    "",
     "_start:",
     "addi $s0,$zero,1024", # make some space
     "",

@@ -99,6 +99,7 @@ class Int(Number):
 
     def MIPS(self):
         return "\n".join([
+            f"# int {self.value}",
             "addi $s1,$s1,-4",
             f"addi $t1,$zero,{self.value}",
             "sw $t1,0($s1)"
@@ -148,6 +149,7 @@ class Id(Token):
         if x in SYMBOLS:
             v = SYMBOLS[x] # this should be added to $s0 to get address
             return "\n".join([
+                f"# getting {self.name}",
                 f"addi $t0,$s0,{-4*v}",
                 "addi $s1,$s1,-4",
                 f"lw $t1,0($t0)",
@@ -564,10 +566,10 @@ class Statements(Node):
                 "addi $t8,$zero,1",#This is permanently going to stay like this
                 "addi $t9,$zero,1",#make the LASTCONDITION to be true
                 f"addi $s1,$s0,{-4*len(SYMBOLS)}",#make space for all the variables that will be used eventually
-                code1,code2,
+                "",code1,"",code2,
             ]
-        else:code = [code1,code2]
-        return "\n\n".join(code)
+        else:code = [code1,"",code2]
+        return "\n".join(code)
 
 class Loop(Node):
     """
@@ -984,16 +986,16 @@ class Assignment(Node):
         n = len(L)
         assert n == 3
         val = L[2].MIPS()
-        if len(val) == 2:
-            code,lab = val
-            if len(L[0].children) > 1: raise RuntimeError("setting algorithm as element of list directly not allowed yet")
-            SYMBOLSTACK[-1][L[0].children[0].value] = lab
-            return code
-        #val = L[2].MIPS() # actually computes the value
+        #if len(val) == 2:
+        #    code,lab = val
+        #    if len(L[0].children) > 1: raise RuntimeError("setting algorithm as element of list directly not allowed yet")
+        #    SYMBOLSTACK[-1][L[0].children[0].value] = lab
+        #    return code
         ass = L[0].MIPS(True) # assigns 0($s1) to the value
         return "\n".join([
             val,
             "",
+            "# Assignment",
             ass
         ])
 
@@ -1130,12 +1132,18 @@ class RunStatement(Node):
         if n > 2 : raise RuntimeError("running algorithm with arguments not available right now")
         lab = L[1].eval()
         return "\n".join([
+            getaddress,
+            "",
+            "# run",
+            "add $t2,$t1,$zero",
             "sw $ra,-4($s1)",
             "sw $s0,-8($s1)",
             "addi $s0,$s1,-8",
-            f"jal {lab}",
+            "jal pathfinder",
+            "addi $ra,$t1,8",
+            f"jr $t2",
             #"lw $t1,0($s1)",
-            "addi $s1,$s1,4",
+            "addi $s1,$s1,8",
             "lw $ra,0($s1)",
             #"sw $t1,0($s1)",
             # commented out stuff is for returns, but run has no returns
@@ -1546,7 +1554,12 @@ class Algorithm(Node):
         labels += 2
         start = f"label{labels-1}"
         end = f"label{labels}"
-        return ("\n".join([
+        return "\n".join([
+            "# Algorithm",
+            f"jal pathfinder # find path of next line",
+            f"addi $t1,$t1,16",
+            f"addi $s1,$s1,-4",
+            f"sw $t1,0($s1)",
             f"j {end} # skip function",
             f"{start}:","",
             code,"",
@@ -1557,7 +1570,7 @@ class Algorithm(Node):
             "add $s0,$zero,$t0",
             "jr $ra",
             f"{end}: # end of function"
-        ]),start)
+        ])
 
 
 
@@ -1662,15 +1675,21 @@ class FunctionCall(Node):
 
     def MIPS(self):
         L = self.children
-        lab = L[0].eval()
+        getaddress = L[0].MIPS()
         return "\n".join([
+            getaddress,
+            "",
+            "# function call",
+            "add $t2,$t1,$zero",
             "sw $ra,-4($s1)",
             "sw $s0,-8($s1)",
             "addi $s0,$s1,-8",
-            f"jal {lab}",
+            "jal pathfinder",
+            "addi $ra,$t1,8",
+            f"jr $t2",
             "lw $t1,0($s1)",
-            "addi $s1,$s1,4",
-            "lw $ra,0($s1)",
+            "addi $s1,$s1,8",
+            "lw $ra,-4($s1)",
             "sw $t1,0($s1)",
         ])
         # ignoring arguments and scoping for now

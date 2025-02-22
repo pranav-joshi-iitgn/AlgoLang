@@ -1,13 +1,6 @@
-# let x;
-# x = 2;
-# while (x < 10) {
-#     x = x+x;
-#     skipit;
-# }
-
 let y;
 let x;
 y = alg(){
-    return 1;
+    return 11;
 };
 x = y();
