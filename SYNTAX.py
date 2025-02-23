@@ -9,9 +9,6 @@ Graph = Digraph("AST")
 cur_node = 0
 labels = 0
 
-# MIPS code is supported by this simulator :
-# https://cpulator.01xz.net/?sys=mipsr5-spim
-
 # settings
 DEBUG_WITH_COLOR = False
 TESTING = False
@@ -903,7 +900,7 @@ class ElseStatement(Node):
             "",
             code,
             "",
-            "addi $t9,$zero,1" # set LASTCONDITION to be true
+            "addi $t9,$zero,1", # set LASTCONDITION to be true
             f"label{labels}: # end else",
         ])
 
@@ -1099,7 +1096,12 @@ class PrintStatement(Node):
             "addi $v0, $zero, 1",
             "lw $a0, 0($s1)",
             "syscall",
-            "addi $s1,$s1,4"
+            "addi $s1,$s1,4",
+            # Just for my own sanity, I'm also printing a new line
+            "# print newline via syscall 11 to clean up",
+            "addi $a0, $0, 10",
+            "addi $v0, $0, 11 ",
+            "syscall",
         ])
 
 class PlotStatement(Node):
@@ -1206,12 +1208,15 @@ class RunStatement(Node):
         SYMBOLS = SYMBOLSTACK[-1]
 
 
-    def MIPS(self):
+    def MIPS(self,start_label="",end_label=""):
         L = self.children
         getaddress = L[1].MIPS()
-        if len(L) == 4:getargs = L[3].MIPS(True)
-        else:getargs = "# No arguments"
-        N = len(L[2].children[::2])
+        if len(L) == 4:
+            getargs = L[3].MIPS(True)
+            N = len(L[3].children[::2])
+        else:
+            getargs = "# No arguments"
+            N = 0
         return "\n".join([
             getaddress,# Also puts current base value in $t0
             "",
