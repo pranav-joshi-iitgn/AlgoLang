@@ -172,14 +172,13 @@ class Id(Token):
             if x in SYMBOLS:
                 v = SYMBOLS[x]
                 code.extend([
-                    f"addi $t0,$t0,{-4*v}",
                     "addi $s1,$s1,-4",
-                    f"lw $t1,0($t0)",
+                    f"lw $t1,{-4*v}($t0)",
                     "sw $t1,0($s1)"
                 ])
                 return "\n".join(code)
             else:
-                code.append("lw $t0,0($t0)")
+                code.append("lw $t0,-4($t0)")
         raise RuntimeError(f"variable {x} not found in any scope")
 
 class Block(Node):
@@ -1607,7 +1606,7 @@ class Algorithm(Node):
     def MIPS(self):
         global labels,SYMBOLSTACK,SymbolsNeeded
         kw,arg,f = self.children
-        SYMBOLSTACK.append({})
+        SYMBOLSTACK.append({"creator":1}) # This is an invalid variable because of the `-`. The name doesn't really matter
         arg = arg.MIPS()
         code = f.MIPS()
         labels += 2
@@ -1750,25 +1749,28 @@ class FunctionCall(Node):
         getargs = L[2].MIPS(True)
         N = len(L[2].children[::2])
         return "\n".join([
-            getaddress,
+            getaddress,# Also puts current base value in $t0
             "",
             "# function call",
             "sw $ra,-4($s1)",
-            #"sw $s0,-8($s1)",
-            "addi $s1,$s1,-4",
+            "addi $s1,$s1,-4", # This is where $s0 will be stored eventually
             "",
             "# Getting Arguments",
+            "",
+            "# first argument is the creator base, currently available in $t0",
+            "addi $s1,$s1,-4",
+            "sw $t0,0($s1)",
             "",
             getargs, #assuming that every argument is only one word
             "",
             "# Making a stack frame",
-            f"addi $s1,$s1,{4*N}",
+            f"addi $s1,$s1,{4*N+4}",
             "lw $t2,4($s1)",
             "lw $t1,0($s1)",
             "sw $t1,4($s1)",
             "sw $s0,0($s1)",
             "add $s0,$s1,$zero",
-            f"addi $s1,$s1,{-4*N}",
+            f"addi $s1,$s1,{-4*N-4}",
 
             "jal pathfinder",
             "addi $ra,$t1,8",
