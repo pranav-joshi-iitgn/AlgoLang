@@ -1084,7 +1084,7 @@ class PrintStatement(Node):
         x = L[1].eval()
         x = to_tuple(x)
         if isinstance(x,Block):x = x.prepr()
-        if not TESTING:print(x,end = "")
+        if not TESTING:print(x)
     
     def MIPS(self,start_label="",end_label=""):
         L = self.children
@@ -1488,10 +1488,6 @@ class Term(MultipleBinaryOperation):
         ]),
     }
 
-def inc(self):
-    global labels
-    labels += 1
-    return labels
 
 class ExponentTower(MultipleBinaryOperation):
     """
@@ -1507,12 +1503,27 @@ class ExponentTower(MultipleBinaryOperation):
         if operation == "^" : return x**y
         else:raise ValueError(f"unrecognised binary operation {operation}")
     
+    def MIPS(self):
+        global labels
+        L = self.children
+        n = len(L)
+        if n == 1: return L[0].MIPS()
+        assert n == 3
+        old1 =  L[0].MIPS()
+        old2 = L[2].MIPS()
+        labels += 1
+        return "\n".join([
+            old1,
+            "",
+            old2,
+            "",
+            "lw $t2,0($s1)",
+            "addi $s1,$s1,4",
+            "lw $t1,0($s1)",
 
-    mips_op = {
-        "^":"\n".join([
             "# fast exponentiation",
             "add $t4,$t8,$zero # t4 = 1",
-            f"label{inc(labels)}_loop:",
+            f"label{labels}_loop:",
             f"beq $t2,$zero,label{labels}_out",
             "and $t3,$t2,$t8",
             f"beq $t3,$zero,label{labels}_in",
@@ -1525,10 +1536,10 @@ class ExponentTower(MultipleBinaryOperation):
             f"j label{labels}_loop",
             f"label{labels}_out:",
             "add $t1,$t4,$zero",
-            "# end exponentiation"
-        ]),
-    }
-    mips_op["**"] = mips_op["^"]
+            "# end exponentiation",
+
+            "sw $t1,0($s1)"
+        ])
 
 class SignedValue(UnaryOperation):
     """
