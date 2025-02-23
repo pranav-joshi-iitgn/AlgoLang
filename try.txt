@@ -1,6 +1,5 @@
-let f;
-f = alg(x){
+let f = alg(x){
     if x < 2 {return 1;}
     return f(x-1) + f(x-2);
 };
-print f(3);
+print f(10);

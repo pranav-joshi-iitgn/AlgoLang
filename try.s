@@ -1,12 +1,18 @@
-.global _start
+# This code can be run on the SPIM simulator. It can be installed on debian/ubuntu as :
+# `sudo apt-get install spim`
+# Then, you can run the code as `spim -f <filename>`
+
+.data
+.text
+.globl main
 
 pathfinder:
 add $t1,$ra,$zero
 jr $ra
 
-_start:
-li $s0,0x40000000
-li $s5,0x40000004
+main:
+addi $s0,$sp,0
+addi $s5,$sp,4
 
 addi $t8,$zero,1
 addi $t9,$zero,1
@@ -19,8 +25,8 @@ jal pathfinder # find path of next line
 addi $t1,$t1,16
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label3 # skip function
-label2:
+j label4 # skip function
+label3:
 
 # x is -8($s0)
 
@@ -36,7 +42,7 @@ sw $t1,0($s1)
 
 # int 2
 addi $s1,$s1,-4
-addi $t1,$zero,2
+li $t1,2
 sw $t1,0($s1)
 
 lw $t2,0($s1)
@@ -47,23 +53,25 @@ sw $t1,0($s1)
 
 lw $t9,0($s1)
 addi $s1,$s1,4
-beq $t9,$zero,label1 # if
+beq $t9,$zero,label2 # if
 
 # int 1
 addi $s1,$s1,-4
-addi $t1,$zero,1
+li $t1,1
 sw $t1,0($s1)
 # return
 lw $t0,0($s0)
 lw $t1,0($s1)
 sw $t1,0($s0)
+addi $t9,$zero,1
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
 
 
 
-label1: # end if
+addi $t9,$zero,1
+label2: # end if
 
 # getting f
 add $t0,$s0,$zero
@@ -90,7 +98,7 @@ sw $t1,0($s1)
 
 # int 1
 addi $s1,$s1,-4
-addi $t1,$zero,1
+li $t1,1
 sw $t1,0($s1)
 
 lw $t2,0($s1)
@@ -140,7 +148,7 @@ sw $t1,0($s1)
 
 # int 2
 addi $s1,$s1,-4
-addi $t1,$zero,2
+li $t1,2
 sw $t1,0($s1)
 
 lw $t2,0($s1)
@@ -174,21 +182,21 @@ sw $t1,0($s1)
 lw $t0,0($s0)
 lw $t1,0($s1)
 sw $t1,0($s0)
+addi $t9,$zero,1
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
 
 
 
+# return whatever is on the top of stack
 lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
+addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label3: # end of function
+label4: # end of function
 
-# Assignment
 lw $t1,0($s1)
 addi $t0,$s0,-4
 sw $t1,0($t0)
@@ -210,9 +218,9 @@ addi $s1,$s1,-4
 addi $s1,$s1,-4
 sw $t0,0($s1)
 
-# int 3
+# int 10
 addi $s1,$s1,-4
-addi $t1,$zero,3
+li $t1,10
 sw $t1,0($s1)
 
 # Making a stack frame
@@ -239,6 +247,11 @@ addi $s1,$s1,4
 
 
 
-# Exit
-addi $v0,$zero,10
+# print newline via syscall 11 to clean up
+addi $a0, $0, 10
+addi $v0, $0, 11 
 syscall
+
+# Exit via syscall 10
+addi $v0,$zero,10
+syscall #10

@@ -101,7 +101,7 @@ class Int(Number):
         return "\n".join([
             f"# int {self.value}",
             "addi $s1,$s1,-4",
-            f"addi $t1,$zero,{self.value}",
+            f"li $t1,{self.value}",
             "sw $t1,0($s1)"
         ])
 
@@ -160,7 +160,7 @@ class Id(Token):
         raise RuntimeError(f"variable {x} not found in any scope")
     """
 
-    def MIPS(self):
+    def MIPS(self,up=False):
         x = self.value
         N = len(SYMBOLSTACK)
         code = [
@@ -171,11 +171,18 @@ class Id(Token):
             SYMBOLS = SYMBOLSTACK[lev]
             if x in SYMBOLS:
                 v = SYMBOLS[x]
-                code.extend([
-                    "addi $s1,$s1,-4",
-                    f"lw $t1,{-4*v}($t0)",
-                    "sw $t1,0($s1)"
-                ])
+                if not up:
+                    code.extend([
+                        "addi $s1,$s1,-4",
+                        f"lw $t1,{-4*v}($t0)",
+                        "sw $t1,0($s1)",
+                    ])
+                else:
+                    code.extend([
+                        "lw $t1,0($s1)",
+                        f"sw $t1,{-4*v}($t0)",
+                        "addi $s1,$s1,4",
+                    ])
                 return "\n".join(code)
             else:
                 code.append("lw $t0,-4($t0)")
@@ -706,7 +713,7 @@ class Break(Node):
     def eval(self):
         return self
     def MIPS(self,start_label="",end_label=""):
-        return f"j {end_label}"
+        return f"addi $t9,$zero,1\nj {end_label}"
 
 class Continue(Node):
     """
@@ -785,6 +792,7 @@ class IfStatement(Node):
             "",
             code,
             "",
+            "addi $t9,$zero,1",
             f"label{labels}: # end if",
         ])
 
@@ -854,6 +862,7 @@ class ElseIfStatement(Node):
             "",
             code,
             "",
+            "addi $t9,$zero,1",
             f"label{labels}: # end elif",
         ])
 
@@ -894,8 +903,8 @@ class ElseStatement(Node):
             "",
             code,
             "",
-            f"label{labels}: # end else",
             "addi $t9,$zero,1" # set LASTCONDITION to be true
+            f"label{labels}: # end else",
         ])
 
 
@@ -978,11 +987,25 @@ class Definition(Node):
         L = self.children
         n = len(L)
         SYMBOLS = SYMBOLSTACK[-1]
-        if n > 2:raise RuntimeError("definition with assignment not done in MIPS yet :(")
+        #if n > 2:raise RuntimeError("definition with assignment not done in MIPS yet :(")
         x = L[1].value # name of variable
         if x in SYMBOLS : return f"# {x} is {-4*SYMBOLS[x]}($s0)"
-        SYMBOLS[x] = max(list(SYMBOLS.values()) + [0]) + 1
-        return f"# {x} is {-4*SYMBOLS[x]}($s0)"
+        v = max(list(SYMBOLS.values()) + [0]) + 1
+        SYMBOLS[x] = v
+        code =  f"# {x} is {-4*v}($s0)"
+        if n == 2 : return code
+        val = L[3].MIPS()
+        code = "\n".join([
+                code,
+                "",
+                val,
+                "",
+                "lw $t1,0($s1)", # get value
+                f"addi $t0,$s0,{-4*v}", # load variable address
+                f"sw $t1,0($t0)", # update the value at variable address
+                "addi $s1,$s1,4" # remove the value on stack
+            ])
+        return code
 
 class Assignment(Node):
     """
@@ -1182,28 +1205,42 @@ class RunStatement(Node):
         SYMBOLSTACK.pop()
         SYMBOLS = SYMBOLSTACK[-1]
 
+
     def MIPS(self):
         L = self.children
-        n = len(L)
-        if n > 2 : raise RuntimeError("running algorithm with arguments not available right now")
-        lab = L[1].eval()
+        getaddress = L[1].MIPS()
+        if len(L) == 4:getargs = L[3].MIPS(True)
+        else:getargs = "# No arguments"
+        N = len(L[2].children[::2])
         return "\n".join([
-            getaddress,
+            getaddress,# Also puts current base value in $t0
             "",
-            "# run",
-            "add $t2,$t1,$zero",
+            "# function call",
             "sw $ra,-4($s1)",
-            "sw $s0,-8($s1)",
-            "addi $s0,$s1,-8",
+            "addi $s1,$s1,-4", # This is where $s0 will be stored eventually
+            "",
+            "# Getting Arguments",
+            "",
+            "# first argument is the creator base, currently available in $t0",
+            "addi $s1,$s1,-4",
+            "sw $t0,0($s1)",
+            "",
+            getargs, #assuming that every argument is only one word
+            "",
+            "# Making a stack frame",
+            f"addi $s1,$s1,{4*N+4}",
+            "lw $t2,4($s1)",
+            "lw $t1,0($s1)",
+            "sw $t1,4($s1)",
+            "sw $s0,0($s1)",
+            "add $s0,$s1,$zero",
+            f"addi $s1,$s1,{-4*N-4}",
+
             "jal pathfinder",
             "addi $ra,$t1,8",
             f"jr $t2",
-            #"lw $t1,0($s1)",
             "addi $s1,$s1,8",
-            "lw $ra,0($s1)",
-            #"sw $t1,0($s1)",
-            # commented out stuff is for returns, but run has no returns
-            "addi $s1,$s1,4" # only for `run`. Not for function calls
+            "lw $ra,-4($s1)",
         ])
 
 class ReturnStatement(Node):
@@ -1238,8 +1275,12 @@ class ReturnStatement(Node):
             val,
             "# return",
             "lw $t0,0($s0)",
+
+
             "lw $t1,0($s1)",
             "sw $t1,0($s0)",
+            "addi $t9,$zero,1",
+
             "add $s1,$s0,$zero",
             "add $s0,$zero,$t0",
             "jr $ra",
@@ -1442,6 +1483,11 @@ class Term(MultipleBinaryOperation):
         ]),
     }
 
+def inc(self):
+    global labels
+    labels += 1
+    return labels
+
 class ExponentTower(MultipleBinaryOperation):
     """
     ExponentTower -> SignedValue ** ExponentTower
@@ -1456,10 +1502,28 @@ class ExponentTower(MultipleBinaryOperation):
         if operation == "^" : return x**y
         else:raise ValueError(f"unrecognised binary operation {operation}")
     
+
     mips_op = {
-        "**":None,
-        "^":None
+        "^":"\n".join([
+            "# fast exponentiation",
+            "add $t4,$t8,$zero # t4 = 1",
+            f"label{inc(labels)}_loop:",
+            f"beq $t2,$zero,label{labels}_out",
+            "and $t3,$t2,$t8",
+            f"beq $t3,$zero,label{labels}_in",
+            "mult $t4,$t1",
+            "mflo $t4 # t4 = t4*t1",
+            f"label{labels}_in: # mult done",
+            "mult $t1,$t1",
+            "mflo $t1 # square",
+            "srl $t2,$t2,1",
+            f"j label{labels}_loop",
+            f"label{labels}_out:",
+            "add $t1,$t4,$zero",
+            "# end exponentiation"
+        ]),
     }
+    mips_op["**"] = mips_op["^"]
 
 class SignedValue(UnaryOperation):
     """
@@ -1621,9 +1685,13 @@ class Algorithm(Node):
             f"j {end} # skip function",
             f"{start}:","",
             arg,"",code,"",
+            "# return whatever is on the top of stack",
             "lw $t0,0($s0)",
-            "lw $t1,0($s1)",
-            "sw $t1,0($s0)",
+
+            #"lw $t1,0($s1)",
+            #"sw $t1,0($s0)",
+            "addi $t9,$zero,0",
+
             "add $s1,$s0,$zero",
             "add $s0,$zero,$t0",
             "jr $ra",
@@ -1780,7 +1848,6 @@ class FunctionCall(Node):
             "lw $ra,0($s1)",
             "sw $t1,0($s1)",
         ])
-        # ignoring arguments and scoping for now
     
 
 
@@ -1867,12 +1934,13 @@ class Assignable(Node):
                 "sw $t1,0($s1)" # replace index on stack with value
             ])
         else:
-            if n == 1:return "\n".join([
-                "lw $t1,0($s1)", # get value
-                f"addi $t0,$s0,{-4*v}", # load variable address
-                "sw $t1,0($t0)", # update the value at address
-                "addi $s1,$s1,4" # remove the variable
-            ])
+            if n == 1:return L[0].MIPS(True)
+            #if n == 1:return "\n".join([
+            #    "lw $t1,0($s1)", # get value
+            #    f"addi $t0,$s0,{-4*v}", # load variable address
+            #    "sw $t1,0($t0)", # update the value at address
+            #    "addi $s1,$s1,4" # remove the variable
+            #])
             assert n == 4
             getindex = L[2].MIPS()
             return "\n".join([
@@ -2115,6 +2183,87 @@ def TestFile(filename):
         return
     print(filename,"ran")
     TESTING = old_TESTING
+
+def ToMIPS(s:str,output_file=None,Format="spim"):
+    set_defaults({})
+    set_symbolstack([{}])
+    s = lex(s)
+    s0 = Statements()
+    res = s0.parse(s)
+    if isinstance(res,ValueError):
+        PrintErr(res)
+        return
+    mips_code = s0.MIPS()
+    if Format == "cpulator":
+        mips_code = "\n".join([
+            "# This code can be run on this MIPS simulator :",
+            "# https://cpulator.01xz.net/?sys=mipsr5-spim",
+            "",
+            ".global _start",
+            "",
+            "pathfinder:",
+            "add $t1,$ra,$zero",
+            "jr $ra",
+            "",
+            "_start:",
+            "li $s0,0x40000000", # make some space
+            "li $s5,0x40000004", # This is our heap pointer
+            "",
+            mips_code,
+            "",
+            "# print newline via syscall 11 to clean up",
+            "addi $a0, $0, 10",
+            "addi $v0, $0, 11 ",
+            "syscall",
+            "",
+            "# Exit via syscall 10",
+            "addi $v0,$zero,10",
+            "syscall #10",
+        ])
+    elif Format == "spim":
+        mips_code = "\n".join([
+            "# This code can be run on the SPIM simulator. It can be installed on debian/ubuntu as :",
+            "# `sudo apt-get install spim`",
+            "# Then, you can run the code as `spim -f <filename>`",
+            "",
+            ".data",
+            ".text",
+            ".globl main",
+            "",
+            "pathfinder:",
+            "add $t1,$ra,$zero",
+            "jr $ra",
+            "",
+            "main:",
+            "addi $s0,$sp,0", # make some space
+            "addi $s5,$sp,4", # This is our heap pointer
+            "",
+            mips_code,
+            "",
+            "# print newline via syscall 11 to clean up",
+            "addi $a0, $0, 10",
+            "addi $v0, $0, 11 ",
+            "syscall",
+            "",
+            "# Exit via syscall 10",
+            "addi $v0,$zero,10",
+            "syscall #10",
+        ]) 
+    else:
+        raise ValueError("Unsupported format for output code")
+    if output_file is not None:
+        if output_file[-2:] != ".s": output_file = output_file + ".s"
+        f=open(output_file,'w')
+        f.write(mips_code)
+        f.close()
+        return True
+    return mips_code
+
+def FileToMIPS(file,output_file=None,Format='spim'):
+    f = open(file,'r')
+    s = f.read()
+    f.close()
+    return ToMIPS(s,output_file,Format)
 
 if __name__ == "__main__":
     import argparse
