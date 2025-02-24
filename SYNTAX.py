@@ -59,6 +59,9 @@ class Node:
             return cid
 
     def MIPS(self):
+        """
+        Converts the AST to a program with MIPS32 ISA instructions.
+        """
         L = self.children
         n = len(L)
         if n==0:return ""
@@ -86,6 +89,9 @@ class Token:
         return self.id
 
 class Number(Token):
+    """
+    Base class for numbers. Evaluates to complex numbers.
+    """
     name = "Number"
     def eval(self):return complex(self.value)
 
@@ -95,6 +101,9 @@ class Int(Number):
     def eval(self):return int(self.value)
 
     def MIPS(self):
+        """
+        Puts the value on the top of stack
+        """
         return "\n".join([
             f"# int {self.value}",
             "addi $s1,$s1,-4",
@@ -140,24 +149,17 @@ class Id(Token):
                 if SYMBOLS[x] is None: raise ValueError(f"{x} is not assigned yet")
                 return SYMBOLS[x]
         raise ValueError(f"undefined variable {x}")
-    
-    """
-    def MIPS(self):
-        x = self.value
-        SYMBOLS = SYMBOLSTACK[-1]
-        if x in SYMBOLS:
-            v = SYMBOLS[x] # this should be added to $s0 to get address
-            return "\n".join([
-                f"# getting {self.name}",
-                f"addi $t0,$s0,{-4*v}",
-                "addi $s1,$s1,-4",
-                f"lw $t1,0($t0)",
-                "sw $t1,0($s1)"
-            ])
-        raise RuntimeError(f"variable {x} not found in any scope")
-    """
 
     def MIPS(self,up=False):
+        """
+        Gets the value of the identifier and puts it on stack.
+        If `up` is set to `True` then it gets the top value in stack and updates the variable instead.
+
+        If not present in current scope, it does back to the scope where the algorithm requiring the variable was defined.
+        This is done recusrively, till eiher the variable is found, or we run out of scopes.
+
+        Note : The "parent" scope in the tree eval parser is just the caller, while in this case, it is the creator of the function.
+        """
         x = self.value
         N = len(SYMBOLSTACK)
         code = [
@@ -327,6 +329,10 @@ class UnaryOperation(Node):
         else: raise ValueError("This isn't good")
 
     def MIPS(self):
+        """
+        Gets the value on the top of stack, operates on it,
+        and stores replaces the old value on the top of stack with the new value.
+        """
         L = self.children
         n = len(L)
         assert n > 0
@@ -364,6 +370,13 @@ class List(UnaryOperation):
         if isinstance(x,ndarray):return list(x)
 
     def MIPS(self):
+        """
+        1. puts the value (say `n`) of the operand on the stack
+        2. increments the heap pointer ($s5) by `n` times the data-type length
+        3. puts the old heap pointer value on the stack, replacing the operand.
+        Note that the values in the heap array will be garbage values.
+        TODO: We need to ensure that the user cannot use these values.
+        """
         L = self.children
         n = len(L)
         if n > 2:raise RuntimeError("`list` keyword takes in an integer expression")
@@ -446,6 +459,13 @@ class BinaryOperation(Node):
         elif len(L) == 3:return self.op(L[0].eval(),L[2].eval())
 
     def MIPS(self):
+        """
+        1. Loads the 2 topmost values from stack into t2 and t1 (in that order)
+        2. pops the stack once
+        3. Operates on t1 and t2.
+           This is usually what you have to write in the `mips_op` attribute (with type `str`) when you inherit from the Base Class.
+        4. Replaces topmost stack value with the result value.
+        """
         L = self.children
         n = len(L)
         if n == 1: return L[0].MIPS()
@@ -511,6 +531,13 @@ class MultipleBinaryOperation(Node):
         elif len(L) == 3:return self.op(L[0].eval(),L[2].eval(),L[1].name)
 
     def MIPS(self):
+        """
+        1. Loads the 2 topmost values from stack into t2 and t1 (in that order)
+        2. pops the stack once
+        3. Operates on t1 and t2.
+           This is usually what you have to write in the `mips_op` attribute (`list` type) when you inherit from the Base Class.
+        4. Replaces topmost stack value with the result value.
+        """
         L = self.children
         n = len(L)
         if n == 1: return L[0].MIPS()
@@ -600,6 +627,10 @@ class Statements(Node):
             x = child.eval()
             if x is not None: return x
     def MIPS(self,root=True,start_label = "",end_label = ""):
+        """
+        initialises $t9 to 1 . This is analogous to the LASTCONDITION global variable
+        Also sets $t8 to 1. This is never changed and is only for my own convenience.
+        """
         global SYMBOLSTACK
         SYMBOLS = SYMBOLSTACK[-1]
         L = self.children
@@ -670,15 +701,19 @@ class Loop(Node):
         if br <= 0 : print("broken while because it took over 10^9 loops")
 
     def MIPS(self,start_label="",end_label=""):
+        """
+        Generates the MIPS code for the body and wraps in a loop.
+        The start and end label are passed to the children recursively, so that break and continue statements work.
+        """
         global labels
         L = self.children
         assert len(L) == 3
         condition = L[1]
         code = L[2].children[1]
         condition = condition.MIPS()
-        labels += 2
-        start_label = f"label{labels-1}"
-        end_label = f"label{labels}"
+        labels += 1
+        start_label = f"label{labels}_start"
+        end_label = f"label{labels}_end"
         code = code.MIPS(False,start_label,end_label)
         return "\n".join([
             f"{start_label}: # while ",
@@ -781,10 +816,12 @@ class IfStatement(Node):
         condition = condition.MIPS()
         labels += 1
         return "\n".join([
+            "# Condition",
+            "",
             condition,
             "",
-            "lw $t9,0($s1)",#get result of condition
-            "addi $s1,$s1,4",# delete a value
+            "lw $t9,0($s1) #get result of condition",
+            "addi $s1,$s1,4 # delete a value",
             f"beq $t9,$zero,label{labels} # if",
             "",
             code,
@@ -850,6 +887,8 @@ class ElseIfStatement(Node):
         condition = condition.MIPS()
         labels += 1
         return "\n".join([
+            "# Condition",
+            "",
             condition,
             "",
             f"bne $t9,$zero,label{labels} # el..",
@@ -896,7 +935,8 @@ class ElseStatement(Node):
         code = code.MIPS(False)
         labels += 1
         return "\n".join([
-            f"bne $t9,$zero,label{labels} # else",
+            "# else",
+            f"bne $t9,$zero,label{labels}",
             "",
             code,
             "",
@@ -904,8 +944,20 @@ class ElseStatement(Node):
             f"label{labels}: # end else",
         ])
 
-
 class SingleStatement(Node):
+    """
+    Non terminal for generating single statements, i.e. the statement, followed by a `;` token.
+    Currently, the statements supported are : 
+    1. print
+    2. run
+    3. dict
+    4. return
+    5. plot
+    6. breakloop
+    7. skipit
+    8. let
+    9. delete
+    """
     name = "SingleStatement"
     def parse(self,s:list):
         n =len(s)
@@ -914,7 +966,7 @@ class SingleStatement(Node):
         if not n > 1:return ValueError(on_wrong)
         if not s[-1][1] == ";":return ValueError(on_wrong)
         right = Token(";")
-        if s[0][1] == "print":left = PrintStatement()
+        if   s[0][1] == "print":left = PrintStatement()
         elif s[0][1] == "run":left = RunStatement()
         elif s[0][1] == "dict":left = Dictionary()
         elif s[0][1] == "return":left = ReturnStatement()
@@ -933,6 +985,9 @@ class SingleStatement(Node):
         assert len(L) == 2
         return L[0].eval()
     def MIPS(self,start_label="",end_label=""):
+        """
+        returns MIPS code for a single statement.
+        """
         return self.children[0].MIPS(start_label,end_label)
 
 class Definition(Node):
@@ -989,7 +1044,7 @@ class Definition(Node):
         if x in SYMBOLS : return f"# {x} is {-4*SYMBOLS[x]}($s0)"
         v = max(list(SYMBOLS.values()) + [0]) + 1
         SYMBOLS[x] = v
-        code =  f"# {x} is {-4*v}($s0)"
+        code =  f"# Definition : {x} is {-4*v}($s0)"
         if n == 2 : return code
         val = L[3].MIPS()
         code = "\n".join([
@@ -997,10 +1052,10 @@ class Definition(Node):
                 "",
                 val,
                 "",
-                "lw $t1,0($s1)", # get value
-                f"addi $t0,$s0,{-4*v}", # load variable address
-                f"sw $t1,0($t0)", # update the value at variable address
-                "addi $s1,$s1,4" # remove the value on stack
+                "lw $t1,0($s1) # get value",
+                f"addi $t0,$s0,{-4*v} # load variable address",
+                f"sw $t1,0($t0) # update the value at variable address",
+                "addi $s1,$s1,4 # remove the value on stack"
             ])
         return code
 
@@ -1049,11 +1104,6 @@ class Assignment(Node):
         n = len(L)
         assert n == 3
         val = L[2].MIPS()
-        #if len(val) == 2:
-        #    code,lab = val
-        #    if len(L[0].children) > 1: raise RuntimeError("setting algorithm as element of list directly not allowed yet")
-        #    SYMBOLSTACK[-1][L[0].children[0].value] = lab
-        #    return code
         ass = L[0].MIPS(True) # assigns 0($s1) to the value
         return "\n".join([
             val,
@@ -1488,7 +1538,6 @@ class Term(MultipleBinaryOperation):
         ]),
     }
 
-
 class ExponentTower(MultipleBinaryOperation):
     """
     ExponentTower -> SignedValue ** ExponentTower
@@ -1686,8 +1735,12 @@ class Algorithm(Node):
     def MIPS(self):
         global labels,SYMBOLSTACK,SymbolsNeeded
         kw,arg,f = self.children
-        SYMBOLSTACK.append({"creator":1}) # This is an invalid variable because of the `-`. The name doesn't really matter
+        SYMBOLSTACK.append({"creator-base":1})
+        # This is an invalid variable because of the `-`. The name doesn't really matter
+        # All that matters is that the user should never be able to access -4($s0) using just the language
+        # This is because it holds the base of the creator on this algorithm
         arg = arg.MIPS()
+        # TODO : Add f.env support so that the function can be returned.
         code = f.MIPS()
         labels += 2
         start = f"label{labels-1}"
@@ -1715,8 +1768,6 @@ class Algorithm(Node):
         ])
         SYMBOLSTACK.pop()
         return to_ret
-
-
 
 class Arguments(Node):
     """
@@ -1828,6 +1879,11 @@ class FunctionCall(Node):
         return to_ret
 
     def MIPS(self):
+        """
+        Prepares the stack for a function call
+        jumps to the function
+        undoes some of the changes done before the function call
+        """
         L = self.children
         getaddress = L[0].MIPS()
         getargs = L[2].MIPS(True)
@@ -1835,7 +1891,7 @@ class FunctionCall(Node):
         return "\n".join([
             getaddress,# Also puts current base value in $t0
             "",
-            "# function call",
+            "# function called",
             "sw $ra,-4($s1)",
             "addi $s1,$s1,-4", # This is where $s0 will be stored eventually
             "",
@@ -1855,27 +1911,18 @@ class FunctionCall(Node):
             "sw $s0,0($s1)",
             "add $s0,$s1,$zero",
             f"addi $s1,$s1,{-4*N-4}",
-
+            "",
+            "# jumping to the function",
             "jal pathfinder",
-            "addi $ra,$t1,8",
+            "addi $ra,$t1,8 # $ra points to the next to next instruction",
             f"jr $t2",
+            "",
+            "# getting the return value",
             "lw $t1,0($s1)",
             "addi $s1,$s1,4",
             "lw $ra,0($s1)",
             "sw $t1,0($s1)",
         ])
-    
-
-
-class SysCall:
-    def __init__(self,name,f):
-        self.name = name
-        self.f = f
-    def eval(self,args):
-        try: return self.f(*args)
-        except Exception as e:
-            raise ValueError(f"Error in {self.name} : {e}")
-
 
 class Assignable(Node):
     """
@@ -1928,6 +1975,10 @@ class Assignable(Node):
         else:raise ValueError("This shouldn't be happening")
 
     def MIPS(self,up=False):
+        """
+        Generates MIPS code for setting and getting values on arrays, and variables.
+        The code is self explanatory. Please read it
+        """
         L = self.children
         n = len(L)
         assert n > 0
@@ -1935,40 +1986,31 @@ class Assignable(Node):
         SYMBOLS = SYMBOLSTACK[-1]
         if v not in SYMBOLS:raise RuntimeError(f"variable {v} not defined yet.")
         v = SYMBOLS[v]
-        if not up: # we are not updating
-            if n == 1:return L[0].MIPS()
-            assert n == 4
-            getindex = L[2].MIPS()
-            return "\n".join([
-                getindex,
-                "",
-                "lw $t2,0($s1)", # load index
-                "sll $t2,$t2,2", # t2 = t2*4
-                f"lw $t0,{-4*v}($s0)", # load pointer value
-                "add $t0,$t0,$t2", # get address
-                "lw $t1,0($t0)", # get value at index
-                "sw $t1,0($s1)" # replace index on stack with value
+        if n ==1: return L[0].MIPS(up)
+        assert n == 4
+        getindex = L[2].MIPS()
+        if not up:return "\n".join([
+            "# Getting index",
+            getindex,
+            "",
+            "lw $t2,0($s1) # load index",
+            "sll $t2,$t2,2 # t2 = t2*4",
+            f"lw $t0,{-4*v}($s0) # load pointer value",
+            "add $t0,$t0,$t2 # get address",
+            "lw $t1,0($t0) # get value at index",
+            "sw $t1,0($s1) # replace index on stack with value"
             ])
-        else:
-            if n == 1:return L[0].MIPS(True)
-            #if n == 1:return "\n".join([
-            #    "lw $t1,0($s1)", # get value
-            #    f"addi $t0,$s0,{-4*v}", # load variable address
-            #    "sw $t1,0($t0)", # update the value at address
-            #    "addi $s1,$s1,4" # remove the variable
-            #])
-            assert n == 4
-            getindex = L[2].MIPS()
-            return "\n".join([
-                getindex,
-                "",
-                "lw $t2,0($s1)",# load index
-                "sll $t2,$t2,2",# t2=t2*4
-                "lw $t1,4($s1)",# load value to be assignment
-                f"lw $t0,{-4*v}($s0)",# load pointer
-                "add $t0,$t0,$t2",# get address on memory location
-                "sw $t1,0($t0)",# store value to address
-                "addi $s1,$s1,8",#clear both index and value
+        else:return "\n".join([
+            "# Getting index",
+            getindex,
+            "",
+            "lw $t2,0($s1) # load index",
+            "sll $t2,$t2,2 # t2=t2*4",
+            "lw $t1,4($s1) # load value to be assignment",
+            f"lw $t0,{-4*v}($s0) # load pointer",
+            "add $t0,$t0,$t2 # get address on memory location",
+            "sw $t1,0($t0) # store value to address",
+            "addi $s1,$s1,8 #clear both index and value",
             ])
 
 class Deletion(Node):
@@ -2002,6 +2044,14 @@ class Deletion(Node):
         key = L[1].eval()
         if key in x:x.pop(key)
         else:raise ValueError(f"key {key} not found in {x}")
+
+class SysCall:
+    def __init__(self,name,f):
+        self.name = name
+        self.f = f
+    def eval(self,args):
+        try: return self.f(*args)
+        except Exception as e:raise ValueError(f"Error in {self.name} : {e}")
 
 
 def TakeIn(prompt:str=""):
@@ -2101,8 +2151,6 @@ def set_defaults(D:dict):
 RESTRICTED = set(DEFAULT_SYMBOLS.keys())
 
 SYMBOLSTACK = [DEFAULT_SYMBOLS.copy()]
-
-# FUNCTIONSTACK = [(-1,"main")] # Not in usage. I was going to use this to avoid more stacks upon self recursion.
 
 def set_symbolstack(L:list):
     global SYMBOLSTACK
