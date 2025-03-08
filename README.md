@@ -1,15 +1,4 @@
 This is a programming language that I built during the 6th semester at IITGN.
-It has nice features like addition of "algorithms",lexical scoping,lists, dictionaries,etc.
-There is a functionality for syntax highlighting as well.
-It lacks massively in debugging as of now.
-
-This is an example exectution:
-
-```sh
-python3 RUN.py sample7.txt
-```
-
-Output:
-
-![image](https://github.com/user-attachments/assets/8ec1abb5-a396-4679-b6b2-e1d7a451d207)
-
+It has nice features like addition of "algorithms",dynamic scoping,lists, dictionaries,etc using a tree-walk interpreter.
+There is a functionality for syntax highlighting as well, using the `algsyn` VS-code extension, and the `RUN.py` script.
+It compiles to MIPS32, although most of the features are only present in the interpreter.
