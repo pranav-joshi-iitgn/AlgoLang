@@ -16,28 +16,14 @@ addi $s5,$sp,4
 
 addi $t8,$zero,1
 addi $t9,$zero,1
-addi $s1,$s0,-8
+addi $s1,$s0,-4
 
-# f is -4($s0)
+# Definition : L is -4($s0)
 
-# Algorithm
-jal pathfinder # find path of next line
-addi $t1,$t1,16
+# get the elements of list, from left to right
+# int 1
 addi $s1,$s1,-4
-sw $t1,0($s1)
-j label4 # skip function
-label3:
-
-# x is -8($s0)
-
-addi $t8,$zero,1
-addi $t9,$zero,1
-addi $s1,$s0,-8
-
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-8($t0)
+li $t1,1
 sw $t1,0($s1)
 
 # int 2
@@ -45,184 +31,45 @@ addi $s1,$s1,-4
 li $t1,2
 sw $t1,0($s1)
 
-lw $t2,0($s1)
-addi $s1,$s1,4
+# int 3
+addi $s1,$s1,-4
+li $t1,3
+sw $t1,0($s1)
+
+addi $s5, 12 # make space for 3 elements on heap
+# store element at index 2
 lw $t1,0($s1)
-slt $t1,$t1,$t2
-sw $t1,0($s1)
+sw $t1,-4($s5)
+# store element at index 1
+lw $t1,4($s1)
+sw $t1,-8($s5)
+# store element at index 0
+lw $t1,8($s1)
+sw $t1,-12($s5)
+addi $s1,8 # pop stack 2 times
+addi $t0,$s5,-12 # old $s5 value
+sw $t0,0($s1) # store pointer on heap
 
-lw $t9,0($s1)
-addi $s1,$s1,4
-beq $t9,$zero,label2 # if
+lw $t1,0($s1) # get value
+addi $t0,$s0,-4 # load variable address
+sw $t1,0($t0) # update the value at variable address
+addi $s1,$s1,4 # remove the value on stack
 
-# int 1
-addi $s1,$s1,-4
-li $t1,1
-sw $t1,0($s1)
-# return
-lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
-addi $t9,$zero,1
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
-
-
-
-addi $t9,$zero,1
-label2: # end if
-
-# getting f
-add $t0,$s0,$zero
-lw $t0,-4($t0)
-addi $s1,$s1,-4
-lw $t1,-4($t0)
-sw $t1,0($s1)
-
-# function call
-sw $ra,-4($s1)
-addi $s1,$s1,-4
-
-# Getting Arguments
-
-# first argument is the creator base, currently available in $t0
-addi $s1,$s1,-4
-sw $t0,0($s1)
-
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
-
+# Getting index
 # int 1
 addi $s1,$s1,-4
 li $t1,1
 sw $t1,0($s1)
 
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-sub $t1,$t1,$t2
-sw $t1,0($s1)
-
-# Making a stack frame
-addi $s1,$s1,8
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
-add $s0,$s1,$zero
-addi $s1,$s1,-8
-jal pathfinder
-addi $ra,$t1,8
-jr $t2
-lw $t1,0($s1)
-addi $s1,$s1,4
-lw $ra,0($s1)
-sw $t1,0($s1)
-
-# getting f
-add $t0,$s0,$zero
-lw $t0,-4($t0)
-addi $s1,$s1,-4
-lw $t1,-4($t0)
-sw $t1,0($s1)
-
-# function call
-sw $ra,-4($s1)
-addi $s1,$s1,-4
-
-# Getting Arguments
-
-# first argument is the creator base, currently available in $t0
-addi $s1,$s1,-4
-sw $t0,0($s1)
-
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
-
-# int 2
-addi $s1,$s1,-4
-li $t1,2
-sw $t1,0($s1)
-
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-sub $t1,$t1,$t2
-sw $t1,0($s1)
-
-# Making a stack frame
-addi $s1,$s1,8
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
-add $s0,$s1,$zero
-addi $s1,$s1,-8
-jal pathfinder
-addi $ra,$t1,8
-jr $t2
-lw $t1,0($s1)
-addi $s1,$s1,4
-lw $ra,0($s1)
-sw $t1,0($s1)
-
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-add $t1,$t1,$t2
-sw $t1,0($s1)
-# return
-lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
-addi $t9,$zero,1
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
-
-
-
-# return whatever is on the top of stack
-lw $t0,0($s0)
-addi $t9,$zero,0
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
-label4: # end of function
-
-lw $t1,0($s1)
-addi $t0,$s0,-4
-sw $t1,0($t0)
-addi $s1,$s1,4
-
-# col is -8($s0)
-
-# Algorithm
-jal pathfinder # find path of next line
-addi $t1,$t1,16
-addi $s1,$s1,-4
-sw $t1,0($s1)
-j label9 # skip function
-label8:
-
-# x is -8($s0)
-
-addi $t8,$zero,1
-addi $t9,$zero,1
-addi $s1,$s0,-8
-
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
+lw $t2,0($s1) # load index
+sll $t2,$t2,2 # t2 = t2*4
+lw $t0,-4($s0) # load pointer value
+srl $t1,$t0,30 # a lil bit of type checking
+addi $t3,$zero,1 # code for list
+bne $t1,$t3,error # type check over
+add $t0,$t0,$t2 # get address
+lw $t1,0($t0) # get value at index
+sw $t1,0($s1) # replace index on stack with value
 
 # Print
 addi $v0, $zero, 1
@@ -234,273 +81,20 @@ addi $a0, $0, 10
 addi $v0, $0, 11 
 syscall
 
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
-
-# int 1
-addi $s1,$s1,-4
-li $t1,1
-sw $t1,0($s1)
-
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-slt $t3,$t1,$t2
-slt $t2,$t2,$t1
-or $t1,$t3,$t2
-sub $t1,$t8,$t1
-sw $t1,0($s1)
-
-lw $t9,0($s1)
-addi $s1,$s1,4
-beq $t9,$zero,label5 # if
-
-
-
-addi $t9,$zero,1
-label5: # end if
-
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
-
-# int 2
-addi $s1,$s1,-4
-li $t1,2
-sw $t1,0($s1)
-
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-div $t1,$t2
-mflo $t2
-mfhi $t1
-sw $t1,0($s1)
-
-# int 0
-addi $s1,$s1,-4
-li $t1,0
-sw $t1,0($s1)
-
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-slt $t3,$t1,$t2
-slt $t2,$t2,$t1
-or $t1,$t3,$t2
-sub $t1,$t8,$t1
-sw $t1,0($s1)
-
-bne $t9,$zero,label6 # el..
-lw $t9,0($s1)
-addi $s1,$s1,4
-beq $t9,$zero,label6 # ..if
-
-# getting col
-add $t0,$s0,$zero
-lw $t0,-4($t0)
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
-
-# function call
-sw $ra,-4($s1)
-addi $s1,$s1,-4
-
-# Getting Arguments
-
-# first argument is the creator base, currently available in $t0
-addi $s1,$s1,-4
-sw $t0,0($s1)
-
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
-
-# int 2
-addi $s1,$s1,-4
-li $t1,2
-sw $t1,0($s1)
-
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-div $t1,$t2
-mfhi $t2
-mflo $t1
-sw $t1,0($s1)
-
-# Making a stack frame
-addi $s1,$s1,8
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
-add $s0,$s1,$zero
-addi $s1,$s1,-8
-jal pathfinder
-addi $ra,$t1,8
-jr $t2
-lw $t1,0($s1)
-addi $s1,$s1,4
-lw $ra,0($s1)
-sw $t1,0($s1)
-# return
-lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
-addi $t9,$zero,1
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
-
-
-
-addi $t9,$zero,1
-label6: # end elif
-
-bne $t9,$zero,label7 # else
-
-# getting col
-add $t0,$s0,$zero
-lw $t0,-4($t0)
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
-
-# function call
-sw $ra,-4($s1)
-addi $s1,$s1,-4
-
-# Getting Arguments
-
-# first argument is the creator base, currently available in $t0
-addi $s1,$s1,-4
-sw $t0,0($s1)
-
-# int 3
-addi $s1,$s1,-4
-li $t1,3
-sw $t1,0($s1)
-
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
-
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-mult $t1,$t2
-mflo $t1
-mfhi $t2
-sw $t1,0($s1)
-
-# int 1
-addi $s1,$s1,-4
-li $t1,1
-sw $t1,0($s1)
-
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-add $t1,$t1,$t2
-sw $t1,0($s1)
-
-# Making a stack frame
-addi $s1,$s1,8
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
-add $s0,$s1,$zero
-addi $s1,$s1,-8
-jal pathfinder
-addi $ra,$t1,8
-jr $t2
-lw $t1,0($s1)
-addi $s1,$s1,4
-lw $ra,0($s1)
-sw $t1,0($s1)
-# return
-lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
-addi $t9,$zero,1
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
-
-
-
-addi $t9,$zero,1
-label7: # end else
-
-
-
-# return whatever is on the top of stack
-lw $t0,0($s0)
-addi $t9,$zero,0
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
-label9: # end of function
-
-lw $t1,0($s1)
-addi $t0,$s0,-8
-sw $t1,0($t0)
-addi $s1,$s1,4
-
-# getting col
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-8($t0)
-sw $t1,0($s1)
-
-# function call
-sw $ra,-4($s1)
-addi $s1,$s1,-4
-
-# Getting Arguments
-
-# first argument is the creator base, currently available in $t0
-addi $s1,$s1,-4
-sw $t0,0($s1)
-
-# int 10
-addi $s1,$s1,-4
-li $t1,10
-sw $t1,0($s1)
-
-# Making a stack frame
-addi $s1,$s1,8
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
-add $s0,$s1,$zero
-addi $s1,$s1,-8
-jal pathfinder
-addi $ra,$t1,8
-jr $t2
-addi $s1,$s1,8
-lw $ra,-4($s1)
-
 
 
 # print newline via syscall 11 to clean up
 addi $a0, $0, 10
 addi $v0, $0, 11 
 syscall
-
+theend:
+# Exit via syscall 10
+addi $v0,$zero,10
+syscall #10
+error:
+addi $a0, $zero, -1
+addi $v0, $zero, 1
+syscall
 # Exit via syscall 10
 addi $v0,$zero,10
 syscall #10

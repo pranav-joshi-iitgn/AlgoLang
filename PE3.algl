@@ -1,5 +1,7 @@
 let N = 600851475143;
 #algo to find prime factors
+# This won't work when compiled, since there will be overflow
+
 let largest_prime = alg(N){
     let p = 2;
     let biggest = 1;
@@ -7,8 +9,9 @@ let largest_prime = alg(N){
         if N mod p == 0 {
             N = N div p;
             biggest = p;
+            print biggest;
             skipit;
-        }
+        } 
         p = p+1;
     }
     if N > 1 {

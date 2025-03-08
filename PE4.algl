@@ -27,8 +27,8 @@ while x > 99 and x*990 > biggest {
     while y > 99{
         z = x * y;
         if check(z) and (z>biggest) {
-            print (z,x,y);
-            print nl;
+            # print (z,x,y);
+            # print nl;
             biggest = z;
             breakloop;
         }

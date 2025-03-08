@@ -13,6 +13,14 @@ labels = 0
 DEBUG_WITH_COLOR = False
 TESTING = False
 
+TYPES = {
+    "int":["000","111"],
+    "str":["001"],
+    "float":["100"],
+    "list":["010","011"],
+    "alg":["101"],
+}
+
 def to_tuple(L):
     """
     Recursively converts lists to tuples
@@ -104,6 +112,8 @@ class Int(Number):
         """
         Puts the value on the top of stack
         """
+        if int(self.value) >= 2**31 or int(self.value) < -2**31:
+            raise RuntimeError(f"integer {self.value} is too big.")
         return "\n".join([
             f"# int {self.value}",
             "addi $s1,$s1,-4",
@@ -1647,9 +1657,26 @@ class EnclosedValues(Node):
         assert L
         if len(L) == 1:return L[0].MIPS()
         elif len(L) == 3:
-            if L[0].value == "(":return L[1].MIPS()
-            elif L[0].value == "[":
-                raise RuntimeError("`[]` not implemented yet :(")
+            if L[0].value == "(" and len(L[1].children) == 1 : return L[1].MIPS()
+            #if L[0].value == "(":return L[1].MIPS()
+            #elif L[0].value == "[":
+            else:
+                n = len(L[1].children)
+                n = n - n//2
+                return "\n".join([
+                    "# get the elements of list, from left to right",
+                    L[1].MIPS(wrap=False),
+                    "",
+                    f"addi $s5, {4*n} # make space for {n} elements on heap",
+                    "\n".join(["\n".join([
+                        f"# store element at index {n-1-i}",
+                        f"lw $t1,{4*i}($s1)",
+                        f"sw $t1,{-4*i-4}($s5)",
+                        ]) for i in range(n)]),
+                    f"addi $s1,{4 * (n-1)} # pop stack {n-1} times",
+                    f"addi $t0,$s5,{-4 * n} # old $s5 value",
+                    f"sw $t0,0($s1) # store pointer on heap",
+                    ])
 
 class Value(Node):
     name = "Value"
@@ -1748,7 +1775,9 @@ class Algorithm(Node):
         to_ret = "\n".join([
             "# Algorithm",
             f"jal pathfinder # find path of next line",
-            f"addi $t1,$t1,16",
+            f"addi $t1,$t1,24",
+            "li $t2,0xA0000000",
+            "or $t1,$t1,$t2",
             f"addi $s1,$s1,-4",
             f"sw $t1,0($s1)",
             f"j {end} # skip function",
@@ -1844,6 +1873,20 @@ class CommaSeparatedValues(Node):
         elif not wrap and n == 1:return self.children[0].MIPS()
         else : return "\n\n".join([x.MIPS() for x in self.children[::2]])
 
+def TypeCheck(Type):
+    global labels
+    FirstThree = TYPES[Type] # This is a list of possible first 3 bits
+    labels += 1
+    to_ret =  "\n".join([
+        f"# assert type is {Type}",
+        "lw $t1,0($s1)",
+        "srl $t1,$t1,29",
+        "\n".join([f"addi $t2,$zero,{int(x,2)}\nbeq $t1,$t2,label{labels}" for x in FirstThree]),
+        "j error # if wrong type",
+        f"label{labels}:# type check over"
+    ])
+    return to_ret
+
 class FunctionCall(Node):
     """
     Example:
@@ -1890,6 +1933,13 @@ class FunctionCall(Node):
         N = len(L[2].children[::2])
         return "\n".join([
             getaddress,# Also puts current base value in $t0
+            "",
+            TypeCheck("alg"),
+            "",
+            "lw $t1, 0($s1)",
+            "li $t2,0x1FFFFFFF",
+            "and $t1, $t1, $t2",
+            "sw $t1, 0($s1)",
             "",
             "# function called",
             "sw $ra,-4($s1)",
@@ -1996,6 +2046,9 @@ class Assignable(Node):
             "lw $t2,0($s1) # load index",
             "sll $t2,$t2,2 # t2 = t2*4",
             f"lw $t0,{-4*v}($s0) # load pointer value",
+            "srl $t1,$t0,30 # a lil bit of type checking",
+            "addi $t3,$zero,1 # code for list",
+            "bne $t1,$t3,error # type check over",
             "add $t0,$t0,$t2 # get address",
             "lw $t1,0($t0) # get value at index",
             "sw $t1,0($s1) # replace index on stack with value"
@@ -2006,8 +2059,11 @@ class Assignable(Node):
             "",
             "lw $t2,0($s1) # load index",
             "sll $t2,$t2,2 # t2=t2*4",
-            "lw $t1,4($s1) # load value to be assignment",
             f"lw $t0,{-4*v}($s0) # load pointer",
+            "srl $t1,$t0,30 # a lil bit of type checking",
+            "addi $t3,$zero,1 # code for list",
+            "bne $t1,$t3,error # type check over",
+            "lw $t1,4($s1) # load value to be assignment",
             "add $t0,$t0,$t2 # get address on memory location",
             "sw $t1,0($t0) # store value to address",
             "addi $s1,$s1,8 #clear both index and value",
@@ -2052,7 +2108,6 @@ class SysCall:
     def eval(self,args):
         try: return self.f(*args)
         except Exception as e:raise ValueError(f"Error in {self.name} : {e}")
-
 
 def TakeIn(prompt:str=""):
     """
@@ -2255,7 +2310,7 @@ def ToMIPS(s:str,output_file=None,Format="spim"):
     s0 = Statements()
     res = s0.parse(s)
     if isinstance(res,ValueError):
-        PrintErr(res)
+        PrintError(res)
         return
     mips_code = s0.MIPS()
     if Format == "cpulator":
@@ -2276,10 +2331,17 @@ def ToMIPS(s:str,output_file=None,Format="spim"):
             mips_code,
             "",
             "# print newline via syscall 11 to clean up",
-            "addi $a0, $0, 10",
-            "addi $v0, $0, 11 ",
+            "addi $a0, $zero, 10",
+            "addi $v0, $zero, 11 ",
             "syscall",
-            "",
+            "theend:",
+            "# Exit via syscall 10",
+            "addi $v0,$zero,10",
+            "syscall #10",
+            "error:",
+            "addi $a0, $zero, -1",
+            "addi $v0, $zero, 1",
+            "syscall",
             "# Exit via syscall 10",
             "addi $v0,$zero,10",
             "syscall #10",
@@ -2308,7 +2370,14 @@ def ToMIPS(s:str,output_file=None,Format="spim"):
             "addi $a0, $0, 10",
             "addi $v0, $0, 11 ",
             "syscall",
-            "",
+            "theend:",
+            "# Exit via syscall 10",
+            "addi $v0,$zero,10",
+            "syscall #10",
+            "error:",
+            "addi $a0, $zero, -1",
+            "addi $v0, $zero, 1",
+            "syscall",
             "# Exit via syscall 10",
             "addi $v0,$zero,10",
             "syscall #10",

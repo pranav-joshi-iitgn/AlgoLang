@@ -1,6 +1,6 @@
 let x = 1;
 if(0){}
-else{ print x + 1;print nl;} # sets Last condition to be evaluated to True
+else{ print x + 1;} # sets Last condition to be evaluated to True
 else{print x;} # only executes if a condition has failed previously
 
 let i = 1;
@@ -14,4 +14,5 @@ while 1 {
     }
     i = i + 1;
 }
+
 print i;

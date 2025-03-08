@@ -28,5 +28,5 @@ while p < N {
 }
 else {
     print counter;
-    print " done" + nl;
+    print -1;
 }
