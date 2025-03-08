@@ -47,7 +47,7 @@ addi $t9,$zero,1
 label1: # end if
 
 # else
-bne $t9,$zero,label2
+bne $t9,$zero,label5
 
 # getting x
 add $t0,$s0,$zero
@@ -67,9 +67,25 @@ add $t1,$t1,$t2
 sw $t1,0($s1)
 
 # Print
-addi $v0, $zero, 1
-lw $a0, 0($s1)
+lw $t0, 0($s1)
+srl $t1,$t0,29
+addi $t3,$zero,7
+beq $t1,$zero,label3
+beq $t1,$t3,label3
+srl $t1,$t1,1
+bne $t1,$t8,error
+label2:addi $v0, $zero, 11 # str
+lw $t1,0($t0)
+beq $t1,$zero,label4
+addi $a0,$t1,0
 syscall
+addi $t0,$t0,4
+j label2 # continue printing charactters
+label3:# int
+addi $v0, $zero,1
+add $a0,$t0,$zero
+syscall
+label4:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $0, 10
@@ -79,10 +95,10 @@ syscall
 
 
 addi $t9,$zero,1
-label2: # end else
+label5: # end else
 
 # else
-bne $t9,$zero,label3
+bne $t9,$zero,label9
 
 # getting x
 add $t0,$s0,$zero
@@ -91,9 +107,25 @@ lw $t1,-4($t0)
 sw $t1,0($s1)
 
 # Print
-addi $v0, $zero, 1
-lw $a0, 0($s1)
+lw $t0, 0($s1)
+srl $t1,$t0,29
+addi $t3,$zero,7
+beq $t1,$zero,label7
+beq $t1,$t3,label7
+srl $t1,$t1,1
+bne $t1,$t8,error
+label6:addi $v0, $zero, 11 # str
+lw $t1,0($t0)
+beq $t1,$zero,label8
+addi $a0,$t1,0
 syscall
+addi $t0,$t0,4
+j label6 # continue printing charactters
+label7:# int
+addi $v0, $zero,1
+add $a0,$t0,$zero
+syscall
+label8:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $0, 10
@@ -103,7 +135,7 @@ syscall
 
 
 addi $t9,$zero,1
-label3: # end else
+label9: # end else
 
 # Definition : i is -8($s0)
 
@@ -117,7 +149,7 @@ addi $t0,$s0,-8 # load variable address
 sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
-label4_start: # while 
+label10_start: # while 
 
 # int 1
 addi $s1,$s1,-4
@@ -128,7 +160,7 @@ addi $s1,$s1,4
 slt $t1,$zero,$t9
 slt $t9,$t9,$zero
 or $t9,$t9,$t1
-beq $t9,$zero,label4_end
+beq $t9,$zero,label10_end
 
 # Condition
 
@@ -151,15 +183,15 @@ sw $t1,0($s1)
 
 lw $t9,0($s1) #get result of condition
 addi $s1,$s1,4 # delete a value
-beq $t9,$zero,label5 # if
+beq $t9,$zero,label11 # if
 
 addi $t9,$zero,1
-j label4_end
+j label10_end
 
 
 
 addi $t9,$zero,1
-label5: # end if
+label11: # end if
 
 # Condition
 
@@ -185,7 +217,7 @@ sw $t1,0($s1)
 
 lw $t9,0($s1) #get result of condition
 addi $s1,$s1,4 # delete a value
-beq $t9,$zero,label6 # if
+beq $t9,$zero,label12 # if
 
 # getting i
 add $t0,$s0,$zero
@@ -213,12 +245,12 @@ lw $t1,0($s1)
 sw $t1,-8($t0)
 addi $s1,$s1,4
 
-j label4_start
+j label10_start
 
 
 
 addi $t9,$zero,1
-label6: # end if
+label12: # end if
 
 # getting i
 add $t0,$s0,$zero
@@ -246,8 +278,8 @@ addi $s1,$s1,4
 
 
 
-j label4_start
-label4_end: # end while
+j label10_start
+label10_end: # end while
 
 # getting i
 add $t0,$s0,$zero
@@ -256,9 +288,25 @@ lw $t1,-8($t0)
 sw $t1,0($s1)
 
 # Print
-addi $v0, $zero, 1
-lw $a0, 0($s1)
+lw $t0, 0($s1)
+srl $t1,$t0,29
+addi $t3,$zero,7
+beq $t1,$zero,label14
+beq $t1,$t3,label14
+srl $t1,$t1,1
+bne $t1,$t8,error
+label13:addi $v0, $zero, 11 # str
+lw $t1,0($t0)
+beq $t1,$zero,label15
+addi $a0,$t1,0
 syscall
+addi $t0,$t0,4
+j label13 # continue printing charactters
+label14:# int
+addi $v0, $zero,1
+add $a0,$t0,$zero
+syscall
+label15:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $0, 10

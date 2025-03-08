@@ -1,0 +1,2 @@
+let s = "a1b2";
+print s;

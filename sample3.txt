@@ -19,5 +19,4 @@ while i < 3 {
 	i = i + 1;
 }
 print F[0];
-print nl;
 print F[1];

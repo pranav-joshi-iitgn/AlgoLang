@@ -15,7 +15,5 @@ if out:asfile = out
 elif file[-4:]==".txt":asfile = file[:-4] + ".s"
 elif file[-5:]==".algl":asfile = file[:-5] + ".s"
 else: asfile = file + ".s"
-try:
-    FileToMIPS(file,asfile,Format)
-    print("compiled")
-except:print("compilation error")
+FileToMIPS(file,asfile,Format)
+print("compiled")

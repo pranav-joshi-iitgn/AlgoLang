@@ -141,6 +141,27 @@ class Str(Token):
     def eval(self):
         return self.value
 
+    def MIPS(self):
+        s = self.value
+        n = len(s)
+        code = [
+            f'# putting "{s}" on heap ',
+            "add $t0,$s5,$zero",
+            f"addi $s5, $s5,{4*n+4}",
+        ]
+        for i,x in enumerate(s) : code.extend([
+            f"addi $t1,$zero,{ord(x)} # {x}",
+            f"sw $t1, {4*i}($t0)",
+        ])
+        code.extend([
+            "# add a null character",
+            f"sw $zero, {4*n}($t0)",
+            "# add the pointer on stack",
+            "addi $s1,$s1,-4",
+            "sw $t0,0($s1)",
+        ])
+        return "\n".join(code)
+
 class Id(Token):
     """
     Identifiers.
@@ -382,8 +403,9 @@ class List(UnaryOperation):
     def MIPS(self):
         """
         1. puts the value (say `n`) of the operand on the stack
-        2. increments the heap pointer ($s5) by `n` times the data-type length
-        3. puts the old heap pointer value on the stack, replacing the operand.
+        2. increments the heap pointer ($s5) by 4n+4.
+        3. puts a 0 as the "last +1" element
+        4. puts the old heap pointer value on the stack, replacing the operand.
         Note that the values in the heap array will be garbage values.
         TODO: We need to ensure that the user cannot use these values.
         """
@@ -398,9 +420,11 @@ class List(UnaryOperation):
             "# list",
             "add $t0,$s5,$zero",
             "lw $t1,0($s1)",
+            "addi $t1,$t1,1",
             "sll $t1,$t1,2",
             "add $s5,$s5,$t1",
             "sw $t0,0($s1)",
+            "sw $zero,-4($s5)",
         ])
 
 class Vector(UnaryOperation):
@@ -1147,15 +1171,34 @@ class PrintStatement(Node):
         if not TESTING:print(x)
     
     def MIPS(self,start_label="",end_label=""):
+        global labels
         L = self.children
         getval = L[1].MIPS()
+        labels += 3
         return "\n".join([
             getval,
             "",
             "# Print",
-            "addi $v0, $zero, 1",
-            "lw $a0, 0($s1)",
+            "lw $t0, 0($s1)",
+            "srl $t1,$t0,29",
+            "addi $t3,$zero,7",
+            f"beq $t1,$zero,label{labels-1}",
+            f"beq $t1,$t3,label{labels-1}",
+            "srl $t1,$t1,1",
+            f"bne $t1,$t8,error",
+            f"label{labels-2}:"
+            "addi $v0, $zero, 11 # str",
+            "lw $t1,0($t0)",
+            f"beq $t1,$zero,label{labels}",
+            "addi $a0,$t1,0",
             "syscall",
+            "addi $t0,$t0,4",
+            f"j label{labels-2} # continue printing charactters",
+            f"label{labels-1}:# int",
+            "addi $v0, $zero,1",
+            "add $a0,$t0,$zero",
+            "syscall",
+            f"label{labels}:# end print",
             "addi $s1,$s1,4",
             # Just for my own sanity, I'm also printing a new line
             "# print newline via syscall 11 to clean up",
@@ -1279,6 +1322,13 @@ class RunStatement(Node):
             N = 0
         return "\n".join([
             getaddress,# Also puts current base value in $t0
+            "",
+            TypeCheck("alg"),
+            "",
+            "lw $t1, 0($s1)",
+            "li $t2,0x1FFFFFFF",
+            "and $t1, $t1, $t2",
+            "sw $t1, 0($s1)",
             "",
             "# function call",
             "sw $ra,-4($s1)",
@@ -1667,15 +1717,16 @@ class EnclosedValues(Node):
                     "# get the elements of list, from left to right",
                     L[1].MIPS(wrap=False),
                     "",
-                    f"addi $s5, {4*n} # make space for {n} elements on heap",
+                    f"addi $s5, {4*n} # make space for {n+1} elements on heap",
                     "\n".join(["\n".join([
                         f"# store element at index {n-1-i}",
                         f"lw $t1,{4*i}($s1)",
-                        f"sw $t1,{-4*i-4}($s5)",
+                        f"sw $t1,{-4*i-8}($s5)",
                         ]) for i in range(n)]),
                     f"addi $s1,{4 * (n-1)} # pop stack {n-1} times",
-                    f"addi $t0,$s5,{-4 * n} # old $s5 value",
+                    f"addi $t0,$s5,{-4*n -4} # old $s5 value",
                     f"sw $t0,0($s1) # store pointer on heap",
+                    "sw $zero,-4($s5) # store 0 as last element"
                     ])
 
 class Value(Node):
@@ -2047,8 +2098,7 @@ class Assignable(Node):
             "sll $t2,$t2,2 # t2 = t2*4",
             f"lw $t0,{-4*v}($s0) # load pointer value",
             "srl $t1,$t0,30 # a lil bit of type checking",
-            "addi $t3,$zero,1 # code for list",
-            "bne $t1,$t3,error # type check over",
+            "bne $t1,$t8,error # type check over",
             "add $t0,$t0,$t2 # get address",
             "lw $t1,0($t0) # get value at index",
             "sw $t1,0($s1) # replace index on stack with value"
@@ -2061,8 +2111,7 @@ class Assignable(Node):
             "sll $t2,$t2,2 # t2=t2*4",
             f"lw $t0,{-4*v}($s0) # load pointer",
             "srl $t1,$t0,30 # a lil bit of type checking",
-            "addi $t3,$zero,1 # code for list",
-            "bne $t1,$t3,error # type check over",
+            "bne $t1,$t8,error # type check over",
             "lw $t1,4($s1) # load value to be assignment",
             "add $t0,$t0,$t2 # get address on memory location",
             "sw $t1,0($t0) # store value to address",
