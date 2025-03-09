@@ -12,6 +12,7 @@ labels = 0
 # settings
 DEBUG_WITH_COLOR = False
 TESTING = False
+FAST = False
 
 TYPES = {
     "int":["000","111"],
@@ -580,7 +581,8 @@ class MultipleBinaryOperation(Node):
         assert n == 3
         old1 =  L[0].MIPS()
         old2 = L[2].MIPS()
-        middle = self.mips_op[L[1].value]
+        if isinstance(self.mips_op,dict):middle = self.mips_op[L[1].value]
+        else:middle = self.mips_op(L[1].value)
         if middle is None:raise RuntimeError(f"{L[1].value} is not implemented yet :(")
         return "\n".join([
             old1,
@@ -1543,10 +1545,67 @@ class Expression(MultipleBinaryOperation):
         if operation == "-" : return x-y
         else:print("This is not good")
     
-    mips_op = {
-        "+":"add $t1,$t1,$t2",
-        "-":"sub $t1,$t1,$t2"
-    }
+    def mips_op(self,op:str):
+        global labels,FAST
+        if op == "-":return "sub $t1,$t1,$t2"
+        elif op == "+":
+            if FAST:return "add $t1,$t1,$t2"
+            labels += 4
+            return "\n".join([
+                "# if t1 is a list or t2 is a list, then jump",
+                "srl $t3,$t1,30",
+                f"beq $t3,$t8,label{labels-1}",
+                "srl $t3,$t2,30",
+                f"beq $t3,$t8,label{labels-1}",
+                "# ensure type is int",
+                "addi $t4,$t4,7",
+                "srl $t3,$t1,29",
+                f"beq $t3,$t4,label{labels-3}",
+                f"beq $t3,$zero,label{labels-3}",
+                "j error",
+                f"label{labels-3}: # t1 is ok", #
+                "srl $t3,$t2,29",
+                f"beq $t3,$t4,label{labels-2}",
+                f"beq $t3,$zero,label{labels-2}",
+                "j error",
+                f"label{labels-2}: # t2 is ok", #
+                "add $t1,$t1,$t2 # addition of integers",
+                f"j label{labels} # finish",
+                "",
+                f"label{labels-1}: # list", #
+                "# concatenate lists",
+                "lw $t3,0($t1) # 4*n1",
+                "lw $t4,0($t2) # 4*n2",
+                "add $t5,$t3,$t4 # 4*(n1+n2)",
+                "add $t0,$s5,$zero # our new thing to return",
+                "add $s5,$s5,$t5 # s5 += 4*(n1+n2)",
+                "addi $s5,$s5,4 # s5 += 4",
+                "sw $t5,0($t0) # store size first",
+                "add $t6,$t0,$zero",
+                "# Add stuff from first list to new allocated space",
+                f"label_t1_{labels}:",
+                "slt $t7,$zero,$t3 # t3 > 0",
+                f"beq $t7,$zero,label_t2_{labels} # done adding",
+                "addi $t6,$t6,4",
+                "addi $t1,$t1,4",
+                "lw $t7,0($t1)",
+                "sw $t7,0($t6)",
+                "addi $t3,$t3,-4",
+                f"j label_t1_{labels}",
+                f"label_t2_{labels}: # add struff from second list",
+                "slt $t7,$zero,$t4 # t3 > 0",
+                f"beq $t7,$zero,label_t2_end_{labels} # done adding",
+                "addi $t6,$t6,4",
+                "addi $t2,$t2,4",
+                "lw $t7,0($t2)",
+                "sw $t7,0($t6)",
+                "addi $t4,$t4,-4",
+                f"j label_t2_{labels}",
+                f"label_t2_end_{labels}: # end adding from 2nd list",
+                "add $t1,$t0,$zero",
+                "",
+                f"label{labels}: # finish", #
+            ])
 
 class Term(MultipleBinaryOperation):
     """
