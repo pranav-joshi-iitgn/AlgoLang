@@ -1,0 +1,3 @@
+let L0 = list 6;
+let L = L0 + (1,2,3);
+print L[7];

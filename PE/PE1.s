@@ -143,7 +143,7 @@ sw $t1,0($s1)
 
 lw $t9,0($s1) #get result of condition
 addi $s1,$s1,4 # delete a value
-beq $t9,$zero,label2 # if
+beq $t9,$zero,label6 # if
 
 # getting S
 add $t0,$s0,$zero
@@ -160,7 +160,60 @@ sw $t1,0($s1)
 lw $t2,0($s1)
 addi $s1,$s1,4
 lw $t1,0($s1)
-add $t1,$t1,$t2
+# if t1 is a list or t2 is a list, then jump
+srl $t3,$t1,30
+beq $t3,$t8,label4
+srl $t3,$t2,30
+beq $t3,$t8,label4
+# ensure type is int
+addi $t4,$t4,7
+srl $t3,$t1,29
+beq $t3,$t4,label2
+beq $t3,$zero,label2
+j error
+label2: # t1 is ok
+srl $t3,$t2,29
+beq $t3,$t4,label3
+beq $t3,$zero,label3
+j error
+label3: # t2 is ok
+add $t1,$t1,$t2 # addition of integers
+j label5 # finish
+
+label4: # list
+# concatenate lists
+lw $t3,0($t1) # 4*n1
+lw $t4,0($t2) # 4*n2
+add $t5,$t3,$t4 # 4*(n1+n2)
+add $t0,$s5,$zero # our new thing to return
+add $s5,$s5,$t5 # s5 += 4*(n1+n2)
+addi $s5,$s5,4 # s5 += 4
+sw $t5,0($t0) # store size first
+add $t6,$t0,$zero
+# Add stuff from first list to new allocated space
+label_t1_5:
+slt $t7,$zero,$t3 # t3 > 0
+beq $t7,$zero,label_t2_5 # done adding
+addi $t6,$t6,4
+addi $t1,$t1,4
+lw $t7,0($t1)
+sw $t7,0($t6)
+addi $t3,$t3,-4
+j label_t1_5
+label_t2_5: # add struff from second list
+slt $t7,$zero,$t4 # t3 > 0
+beq $t7,$zero,label_t2_end_5 # done adding
+addi $t6,$t6,4
+addi $t2,$t2,4
+lw $t7,0($t2)
+sw $t7,0($t6)
+addi $t4,$t4,-4
+j label_t2_5
+label_t2_end_5: # end adding from 2nd list
+add $t1,$t0,$zero
+
+label5: # finish
+
 sw $t1,0($s1)
 
 # Assignment
@@ -173,7 +226,7 @@ addi $s1,$s1,4
 
 
 addi $t9,$zero,1
-label2: # end if
+label6: # end if
 
 # getting x
 add $t0,$s0,$zero
@@ -189,7 +242,60 @@ sw $t1,0($s1)
 lw $t2,0($s1)
 addi $s1,$s1,4
 lw $t1,0($s1)
-add $t1,$t1,$t2
+# if t1 is a list or t2 is a list, then jump
+srl $t3,$t1,30
+beq $t3,$t8,label9
+srl $t3,$t2,30
+beq $t3,$t8,label9
+# ensure type is int
+addi $t4,$t4,7
+srl $t3,$t1,29
+beq $t3,$t4,label7
+beq $t3,$zero,label7
+j error
+label7: # t1 is ok
+srl $t3,$t2,29
+beq $t3,$t4,label8
+beq $t3,$zero,label8
+j error
+label8: # t2 is ok
+add $t1,$t1,$t2 # addition of integers
+j label10 # finish
+
+label9: # list
+# concatenate lists
+lw $t3,0($t1) # 4*n1
+lw $t4,0($t2) # 4*n2
+add $t5,$t3,$t4 # 4*(n1+n2)
+add $t0,$s5,$zero # our new thing to return
+add $s5,$s5,$t5 # s5 += 4*(n1+n2)
+addi $s5,$s5,4 # s5 += 4
+sw $t5,0($t0) # store size first
+add $t6,$t0,$zero
+# Add stuff from first list to new allocated space
+label_t1_10:
+slt $t7,$zero,$t3 # t3 > 0
+beq $t7,$zero,label_t2_10 # done adding
+addi $t6,$t6,4
+addi $t1,$t1,4
+lw $t7,0($t1)
+sw $t7,0($t6)
+addi $t3,$t3,-4
+j label_t1_10
+label_t2_10: # add struff from second list
+slt $t7,$zero,$t4 # t3 > 0
+beq $t7,$zero,label_t2_end_10 # done adding
+addi $t6,$t6,4
+addi $t2,$t2,4
+lw $t7,0($t2)
+sw $t7,0($t6)
+addi $t4,$t4,-4
+j label_t2_10
+label_t2_end_10: # end adding from 2nd list
+add $t1,$t0,$zero
+
+label10: # finish
+
 sw $t1,0($s1)
 
 # Assignment
@@ -211,14 +317,34 @@ lw $t1,-4($t0)
 sw $t1,0($s1)
 
 # Print
-addi $v0, $zero, 1
-lw $a0, 0($s1)
+lw $t0, 0($s1)
+srl $t1,$t0,29
+addi $t3,$zero,7
+beq $t1,$zero,label12 # 000 -> int
+beq $t1,$t3,label12 # 111 -> int
+srl $t1,$t1,1
+bne $t1,$t8,error # 010 or 011 are for str and list
+lw $t1,0($t0) # 4n
+addi $v0,$zero,11 # str
+label11: # print character routine
+slt $t3,$zero,$t1
+beq $t3,$zero,label13 # if t1 <= 0, finish
+addi $t0,$t0,4 # next character
+lw $a0,0($t0) #put char in buffer
+syscall # print char
+addi $t1,$t1,-4 # decr remaining bytes by 1
+j label11 # continue printing charactters
+label12:# int
+addi $v0, $zero,1
+add $a0,$t0,$zero
 syscall
+label13:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
-addi $a0, $0, 10
-addi $v0, $0, 11 
+addi $a0, $zero, 10
+addi $v0, $zero, 11 
 syscall
+
 
 
 

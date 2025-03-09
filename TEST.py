@@ -1,4 +1,4 @@
 from SYNTAX import TestFile
 for i in range(1,13):
-    filename = f"sample{i}.txt"
+    filename = f"samples/sample{i}.txt"
     TestFile(filename)

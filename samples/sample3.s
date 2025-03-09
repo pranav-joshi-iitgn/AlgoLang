@@ -27,8 +27,8 @@ li $t2,0xA0000000
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label2 # skip function
-label1:
+j label6 # skip function
+label5:
 
 # L is -8($s0)
 
@@ -49,9 +49,11 @@ sll $t2,$t2,2 # t2 = t2*4
 lw $t0,-8($s0) # load pointer value
 srl $t1,$t0,30 # a lil bit of type checking
 bne $t1,$t8,error # type check over
-add $t0,$t0,$t2 # get address
+add $t0,$t2,$t0 # get address
+addi $t0,$t0,4 # still getting address..
 lw $t1,0($t0) # get value at index
-sw $t1,0($s1) # replace index on stack with value
+sw $t1,0($s1) # replace index on stack with valu
+
 
 lw $t1,0($s1) # get value
 addi $t0,$s0,-12 # load variable address
@@ -71,9 +73,11 @@ sll $t2,$t2,2 # t2 = t2*4
 lw $t0,-8($s0) # load pointer value
 srl $t1,$t0,30 # a lil bit of type checking
 bne $t1,$t8,error # type check over
-add $t0,$t0,$t2 # get address
+add $t0,$t2,$t0 # get address
+addi $t0,$t0,4 # still getting address..
 lw $t1,0($t0) # get value at index
-sw $t1,0($s1) # replace index on stack with value
+sw $t1,0($s1) # replace index on stack with valu
+
 
 lw $t1,0($s1) # get value
 addi $t0,$s0,-16 # load variable address
@@ -97,7 +101,60 @@ sw $t1,0($s1)
 lw $t2,0($s1)
 addi $s1,$s1,4
 lw $t1,0($s1)
-add $t1,$t1,$t2
+# if t1 is a list or t2 is a list, then jump
+srl $t3,$t1,30
+beq $t3,$t8,label3
+srl $t3,$t2,30
+beq $t3,$t8,label3
+# ensure type is int
+addi $t4,$t4,7
+srl $t3,$t1,29
+beq $t3,$t4,label1
+beq $t3,$zero,label1
+j error
+label1: # t1 is ok
+srl $t3,$t2,29
+beq $t3,$t4,label2
+beq $t3,$zero,label2
+j error
+label2: # t2 is ok
+add $t1,$t1,$t2 # addition of integers
+j label4 # finish
+
+label3: # list
+# concatenate lists
+lw $t3,0($t1) # 4*n1
+lw $t4,0($t2) # 4*n2
+add $t5,$t3,$t4 # 4*(n1+n2)
+add $t0,$s5,$zero # our new thing to return
+add $s5,$s5,$t5 # s5 += 4*(n1+n2)
+addi $s5,$s5,4 # s5 += 4
+sw $t5,0($t0) # store size first
+add $t6,$t0,$zero
+# Add stuff from first list to new allocated space
+label_t1_4:
+slt $t7,$zero,$t3 # t3 > 0
+beq $t7,$zero,label_t2_4 # done adding
+addi $t6,$t6,4
+addi $t1,$t1,4
+lw $t7,0($t1)
+sw $t7,0($t6)
+addi $t3,$t3,-4
+j label_t1_4
+label_t2_4: # add struff from second list
+slt $t7,$zero,$t4 # t3 > 0
+beq $t7,$zero,label_t2_end_4 # done adding
+addi $t6,$t6,4
+addi $t2,$t2,4
+lw $t7,0($t2)
+sw $t7,0($t6)
+addi $t4,$t4,-4
+j label_t2_4
+label_t2_end_4: # end adding from 2nd list
+add $t1,$t0,$zero
+
+label4: # finish
+
 sw $t1,0($s1)
 
 lw $t1,0($s1) # get value
@@ -124,7 +181,8 @@ lw $t0,-8($s0) # load pointer
 srl $t1,$t0,30 # a lil bit of type checking
 bne $t1,$t8,error # type check over
 lw $t1,4($s1) # load value to be assignment
-add $t0,$t0,$t2 # get address on memory location
+add $t0,$t2,$t0 # get address on memory location
+addi $t0,$t0,4 # still getting address..
 sw $t1,0($t0) # store value to address
 addi $s1,$s1,8 #clear both index and value
 
@@ -147,7 +205,8 @@ lw $t0,-8($s0) # load pointer
 srl $t1,$t0,30 # a lil bit of type checking
 bne $t1,$t8,error # type check over
 lw $t1,4($s1) # load value to be assignment
-add $t0,$t0,$t2 # get address on memory location
+add $t0,$t2,$t0 # get address on memory location
+addi $t0,$t0,4 # still getting address..
 sw $t1,0($t0) # store value to address
 addi $s1,$s1,8 #clear both index and value
 
@@ -173,7 +232,8 @@ addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label2: # end of function
+label6: # end of function
+
 
 lw $t1,0($s1) # get value
 addi $t0,$s0,-4 # load variable address
@@ -189,12 +249,12 @@ sw $t1,0($s1)
 
 # list
 add $t0,$s5,$zero
-lw $t1,0($s1)
-addi $t1,$t1,1
-sll $t1,$t1,2
-add $s5,$s5,$t1
-sw $t0,0($s1)
-sw $zero,-4($s5)
+lw $t1,0($s1) # n
+sll $t1,$t1,2 # 4n
+addi $t2,$t1,4 # 4n+4
+add $s5,$s5,$t2 # inc $s5 by 4n+4
+sw $t0,0($s1) # store pointer on stack
+sw $t1,0($t0) # store 4n as first thing
 
 lw $t1,0($s1) # get value
 addi $t0,$s0,-8 # load variable address
@@ -219,7 +279,8 @@ lw $t0,-8($s0) # load pointer
 srl $t1,$t0,30 # a lil bit of type checking
 bne $t1,$t8,error # type check over
 lw $t1,4($s1) # load value to be assignment
-add $t0,$t0,$t2 # get address on memory location
+add $t0,$t2,$t0 # get address on memory location
+addi $t0,$t0,4 # still getting address..
 sw $t1,0($t0) # store value to address
 addi $s1,$s1,8 #clear both index and value
 
@@ -241,7 +302,8 @@ lw $t0,-8($s0) # load pointer
 srl $t1,$t0,30 # a lil bit of type checking
 bne $t1,$t8,error # type check over
 lw $t1,4($s1) # load value to be assignment
-add $t0,$t0,$t2 # get address on memory location
+add $t0,$t2,$t0 # get address on memory location
+addi $t0,$t0,4 # still getting address..
 sw $t1,0($t0) # store value to address
 addi $s1,$s1,8 #clear both index and value
 
@@ -259,7 +321,7 @@ addi $s1,$s1,4 # remove the value on stack
 
 # Definition : ret is -16($s0)
 
-label3_start: # while 
+label7_start: # while 
 
 # getting i
 add $t0,$s0,$zero
@@ -282,21 +344,20 @@ addi $s1,$s1,4
 slt $t1,$zero,$t9
 slt $t9,$t9,$zero
 or $t9,$t9,$t1
-beq $t9,$zero,label3_end
+beq $t9,$zero,label7_end
 
 # getting f
 add $t0,$s0,$zero
 addi $s1,$s1,-4
 lw $t1,-4($t0)
-sw $t1,0($s1)
-
+sw $t1,0($s1) 
 # assert type is alg
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,5
-beq $t1,$t2,label4
+beq $t1,$t2,label8
 j error # if wrong type
-label4:# type check over
+label8:# type check over 
 
 lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
@@ -339,6 +400,7 @@ addi $s1,$s1,4
 lw $ra,0($s1)
 sw $t1,0($s1)
 
+
 # Assignment
 # getting ret
 add $t0,$s0,$zero
@@ -360,7 +422,60 @@ sw $t1,0($s1)
 lw $t2,0($s1)
 addi $s1,$s1,4
 lw $t1,0($s1)
-add $t1,$t1,$t2
+# if t1 is a list or t2 is a list, then jump
+srl $t3,$t1,30
+beq $t3,$t8,label11
+srl $t3,$t2,30
+beq $t3,$t8,label11
+# ensure type is int
+addi $t4,$t4,7
+srl $t3,$t1,29
+beq $t3,$t4,label9
+beq $t3,$zero,label9
+j error
+label9: # t1 is ok
+srl $t3,$t2,29
+beq $t3,$t4,label10
+beq $t3,$zero,label10
+j error
+label10: # t2 is ok
+add $t1,$t1,$t2 # addition of integers
+j label12 # finish
+
+label11: # list
+# concatenate lists
+lw $t3,0($t1) # 4*n1
+lw $t4,0($t2) # 4*n2
+add $t5,$t3,$t4 # 4*(n1+n2)
+add $t0,$s5,$zero # our new thing to return
+add $s5,$s5,$t5 # s5 += 4*(n1+n2)
+addi $s5,$s5,4 # s5 += 4
+sw $t5,0($t0) # store size first
+add $t6,$t0,$zero
+# Add stuff from first list to new allocated space
+label_t1_12:
+slt $t7,$zero,$t3 # t3 > 0
+beq $t7,$zero,label_t2_12 # done adding
+addi $t6,$t6,4
+addi $t1,$t1,4
+lw $t7,0($t1)
+sw $t7,0($t6)
+addi $t3,$t3,-4
+j label_t1_12
+label_t2_12: # add struff from second list
+slt $t7,$zero,$t4 # t3 > 0
+beq $t7,$zero,label_t2_end_12 # done adding
+addi $t6,$t6,4
+addi $t2,$t2,4
+lw $t7,0($t2)
+sw $t7,0($t6)
+addi $t4,$t4,-4
+j label_t2_12
+label_t2_end_12: # end adding from 2nd list
+add $t1,$t0,$zero
+
+label12: # finish
+
 sw $t1,0($s1)
 
 # Assignment
@@ -372,8 +487,8 @@ addi $s1,$s1,4
 
 
 
-j label3_start
-label3_end: # end while
+j label7_start
+label7_end: # end while
 
 # Getting index
 # int 0
@@ -386,35 +501,41 @@ sll $t2,$t2,2 # t2 = t2*4
 lw $t0,-8($s0) # load pointer value
 srl $t1,$t0,30 # a lil bit of type checking
 bne $t1,$t8,error # type check over
-add $t0,$t0,$t2 # get address
+add $t0,$t2,$t0 # get address
+addi $t0,$t0,4 # still getting address..
 lw $t1,0($t0) # get value at index
-sw $t1,0($s1) # replace index on stack with value
+sw $t1,0($s1) # replace index on stack with valu
+
 
 # Print
 lw $t0, 0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label6
-beq $t1,$t3,label6
+beq $t1,$zero,label14 # 000 -> int
+beq $t1,$t3,label14 # 111 -> int
 srl $t1,$t1,1
-bne $t1,$t8,error
-label5:addi $v0, $zero, 11 # str
-lw $t1,0($t0)
-beq $t1,$zero,label7
-addi $a0,$t1,0
-syscall
-addi $t0,$t0,4
-j label5 # continue printing charactters
-label6:# int
+bne $t1,$t8,error # 010 or 011 are for str and list
+lw $t1,0($t0) # 4n
+addi $v0,$zero,11 # str
+label13: # print character routine
+slt $t3,$zero,$t1
+beq $t3,$zero,label15 # if t1 <= 0, finish
+addi $t0,$t0,4 # next character
+lw $a0,0($t0) #put char in buffer
+syscall # print char
+addi $t1,$t1,-4 # decr remaining bytes by 1
+j label13 # continue printing charactters
+label14:# int
 addi $v0, $zero,1
 add $a0,$t0,$zero
 syscall
-label7:# end print
+label15:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
-addi $a0, $0, 10
-addi $v0, $0, 11 
+addi $a0, $zero, 10
+addi $v0, $zero, 11 
 syscall
+
 
 # Getting index
 # int 1
@@ -427,35 +548,41 @@ sll $t2,$t2,2 # t2 = t2*4
 lw $t0,-8($s0) # load pointer value
 srl $t1,$t0,30 # a lil bit of type checking
 bne $t1,$t8,error # type check over
-add $t0,$t0,$t2 # get address
+add $t0,$t2,$t0 # get address
+addi $t0,$t0,4 # still getting address..
 lw $t1,0($t0) # get value at index
-sw $t1,0($s1) # replace index on stack with value
+sw $t1,0($s1) # replace index on stack with valu
+
 
 # Print
 lw $t0, 0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label9
-beq $t1,$t3,label9
+beq $t1,$zero,label17 # 000 -> int
+beq $t1,$t3,label17 # 111 -> int
 srl $t1,$t1,1
-bne $t1,$t8,error
-label8:addi $v0, $zero, 11 # str
-lw $t1,0($t0)
-beq $t1,$zero,label10
-addi $a0,$t1,0
-syscall
-addi $t0,$t0,4
-j label8 # continue printing charactters
-label9:# int
+bne $t1,$t8,error # 010 or 011 are for str and list
+lw $t1,0($t0) # 4n
+addi $v0,$zero,11 # str
+label16: # print character routine
+slt $t3,$zero,$t1
+beq $t3,$zero,label18 # if t1 <= 0, finish
+addi $t0,$t0,4 # next character
+lw $a0,0($t0) #put char in buffer
+syscall # print char
+addi $t1,$t1,-4 # decr remaining bytes by 1
+j label16 # continue printing charactters
+label17:# int
 addi $v0, $zero,1
 add $a0,$t0,$zero
 syscall
-label10:# end print
+label18:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
-addi $a0, $0, 10
-addi $v0, $0, 11 
+addi $a0, $zero, 10
+addi $v0, $zero, 11 
 syscall
+
 
 
 

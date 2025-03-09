@@ -16,8 +16,8 @@ FAST = False
 
 TYPES = {
     "int":["000","111"],
-    "str":["001"],
-    "float":["100"],
+    "float":["100"], # let's.. just not do this..
+    "str":["010","011"],
     "list":["010","011"],
     "alg":["101"],
 }
@@ -157,8 +157,6 @@ class Str(Token):
             f"sw $t1, {4*i+4}($t0)",
         ])
         code.extend([
-            #"# add a null character",
-            #f"sw $zero, {4*n}($t0)",
             "# add the pointer on stack",
             "addi $s1,$s1,-4",
             "sw $t0,0($s1)",
@@ -419,15 +417,16 @@ class List(UnaryOperation):
         right = right.MIPS()
         return "\n".join([
             right,
-            "",
-            "# list",
-            "add $t0,$s5,$zero",
-            "lw $t1,0($s1) # n",
-            "sll $t1,$t1,2 # 4n",
-            "addi $t2,$t1,4 # 4n+4",
-            "add $s5,$s5,$t2 # inc $s5 by 4n+4",
-            "sw $t0,0($s1) # store pointer on stack",
-            "sw $t1,0($t0) # store 4n as first thing",
+            open("helpers/list.s").read(),
+            #"",
+            #"# list",
+            #"add $t0,$s5,$zero",
+            #"lw $t1,0($s1) # n",
+            #"sll $t1,$t1,2 # 4n",
+            #"addi $t2,$t1,4 # 4n+4",
+            #"add $s5,$s5,$t2 # inc $s5 by 4n+4",
+            #"sw $t0,0($s1) # store pointer on stack",
+            #"sw $t1,0($t0) # store 4n as first thing",
         ])
 
 class Vector(UnaryOperation):
@@ -1179,39 +1178,39 @@ class PrintStatement(Node):
         L = self.children
         getval = L[1].MIPS()
         labels += 3
-        return "\n".join([
-            getval,
-            "",
-            "# Print",
-            "lw $t0, 0($s1)",
-            "srl $t1,$t0,29",
-            "addi $t3,$zero,7",
-            f"beq $t1,$zero,label{labels-1} # 000 -> int",
-            f"beq $t1,$t3,label{labels-1} # 111 -> int",
-            "srl $t1,$t1,1",
-            f"bne $t1,$t8,error # 010 or 011 are for str and list",
-            "lw $t1,0($t0) # 4n",
-            "addi $v0,$zero,11 # str",
-            f"label{labels-2}: # print character routine",
-            "slt $t3,$zero,$t1",
-            f"beq $t3,$zero,label{labels} # if t1 <= 0, finish",
-            "addi $t0,$t0,4 # next character",
-            "lw $a0,0($t0) #put char in buffer",
-            "syscall # print char",
-            "addi $t1,$t1,-4 # decr remaining bytes by 1",
-            f"j label{labels-2} # continue printing charactters",
-            f"label{labels-1}:# int",
-            "addi $v0, $zero,1",
-            "add $a0,$t0,$zero",
-            "syscall",
-            f"label{labels}:# end print",
-            "addi $s1,$s1,4",
-            # Just for my own sanity, I'm also printing a new line
-            "# print newline via syscall 11 to clean up",
-            "addi $a0, $zero, 10",
-            "addi $v0, $zero, 11 ",
-            "syscall",
-        ])
+        return getval + "\n" + open("helpers/print.s").read().format(labels=labels,labelsm1=labels-1,labelsm2=labels-2)
+        #return "\n".join([
+        #    getval,
+        #    "",
+        #    "# Print",
+        #    "lw $t0, 0($s1)",
+        #    "srl $t1,$t0,29",
+        #    "addi $t3,$zero,7",
+        #    f"beq $t1,$zero,label{labels-1} # 000 -> int",
+        #    f"beq $t1,$t3,label{labels-1} # 111 -> int",
+        #    "srl $t1,$t1,1",
+        #    f"bne $t1,$t8,error # 010 or 011 are for str and list",
+        #    "lw $t1,0($t0) # 4n",
+        #    "addi $v0,$zero,11 # str",
+        #    f"label{labels-2}: # print character routine",
+        #    "slt $t3,$zero,$t1",
+        #    f"beq $t3,$zero,label{labels} # if t1 <= 0, finish",
+        #    "addi $t0,$t0,4 # next character",
+        #    "lw $a0,0($t0) #put char in buffer",
+        #    "syscall # print char",
+        #    "addi $t1,$t1,-4 # decr remaining bytes by 1",
+        #    f"j label{labels-2} # continue printing charactters",
+        #    f"label{labels-1}:# int",
+        #    "addi $v0, $zero,1",
+        #    "add $a0,$t0,$zero",
+        #    "syscall",
+        #    f"label{labels}:# end print",
+        #    "addi $s1,$s1,4",
+        #    "# print newline via syscall 11 to clean up",
+        #    "addi $a0, $zero, 10",
+        #    "addi $v0, $zero, 11 ",
+        #    "syscall",
+        #])
 
 class PlotStatement(Node):
     name:"plot"
@@ -1326,43 +1325,47 @@ class RunStatement(Node):
         else:
             getargs = "# No arguments"
             N = 0
-        return "\n".join([
+        return "\n ".join([
             getaddress,# Also puts current base value in $t0
-            "",
             TypeCheck("alg"),
-            "",
-            "lw $t1, 0($s1)",
-            "li $t2,0x1FFFFFFF",
-            "and $t1, $t1, $t2",
-            "sw $t1, 0($s1)",
-            "",
-            "# function call",
-            "sw $ra,-4($s1)",
-            "addi $s1,$s1,-4", # This is where $s0 will be stored eventually
-            "",
-            "# Getting Arguments",
-            "",
-            "# first argument is the creator base, currently available in $t0",
-            "addi $s1,$s1,-4",
-            "sw $t0,0($s1)",
-            "",
-            getargs, #assuming that every argument is only one word
-            "",
-            "# Making a stack frame",
-            f"addi $s1,$s1,{4*N+4}",
-            "lw $t2,4($s1)",
-            "lw $t1,0($s1)",
-            "sw $t1,4($s1)",
-            "sw $s0,0($s1)",
-            "add $s0,$s1,$zero",
-            f"addi $s1,$s1,{-4*N-4}",
-
-            "jal pathfinder",
-            "addi $ra,$t1,8",
-            f"jr $t2",
-            "addi $s1,$s1,8",
-            "lw $ra,-4($s1)",
+            open("helpers/run.s").read().format(getargs=getargs,p4Np4=4*N+4,m4Nm4=-4*N-4)
         ])
+        #return "\n".join([
+        #    getaddress,# Also puts current base value in $t0
+        #    "",
+        #    TypeCheck("alg"),
+        #    "",
+        #    "lw $t1, 0($s1)",
+        #    "li $t2,0x1FFFFFFF",
+        #    "and $t1, $t1, $t2",
+        #    "sw $t1, 0($s1)",
+        #    "",
+        #    "# function call",
+        #    "sw $ra,-4($s1)",
+        #    "addi $s1,$s1,-4", # This is where $s0 will be stored eventually
+        #    "",
+        #    "# Getting Arguments",
+        #    "",
+        #    "# first argument is the creator base, currently available in $t0",
+        #    "addi $s1,$s1,-4",
+        #    "sw $t0,0($s1)",
+        #    "",
+        #    getargs, #assuming that every argument is only one word
+        #    "",
+        #    "# Making a stack frame",
+        #    f"addi $s1,$s1,{4*N+4}",
+        #    "lw $t2,4($s1)",
+        #    "lw $t1,0($s1)",
+        #    "sw $t1,4($s1)",
+        #    "sw $s0,0($s1)",
+        #    "add $s0,$s1,$zero",
+        #    f"addi $s1,$s1,{-4*N-4}",
+        #    "jal pathfinder",
+        #    "addi $ra,$t1,8",
+        #    f"jr $t2",
+        #    "addi $s1,$s1,8",
+        #    "lw $ra,-4($s1)",
+        #])
 
 class ReturnStatement(Node):
     """
@@ -1396,7 +1399,6 @@ class ReturnStatement(Node):
             val,
             "# return",
             "lw $t0,0($s0)",
-
 
             "lw $t1,0($s1)",
             "sw $t1,0($s0)",
@@ -1551,61 +1553,62 @@ class Expression(MultipleBinaryOperation):
         elif op == "+":
             if FAST:return "add $t1,$t1,$t2"
             labels += 4
-            return "\n".join([
-                "# if t1 is a list or t2 is a list, then jump",
-                "srl $t3,$t1,30",
-                f"beq $t3,$t8,label{labels-1}",
-                "srl $t3,$t2,30",
-                f"beq $t3,$t8,label{labels-1}",
-                "# ensure type is int",
-                "addi $t4,$t4,7",
-                "srl $t3,$t1,29",
-                f"beq $t3,$t4,label{labels-3}",
-                f"beq $t3,$zero,label{labels-3}",
-                "j error",
-                f"label{labels-3}: # t1 is ok", #
-                "srl $t3,$t2,29",
-                f"beq $t3,$t4,label{labels-2}",
-                f"beq $t3,$zero,label{labels-2}",
-                "j error",
-                f"label{labels-2}: # t2 is ok", #
-                "add $t1,$t1,$t2 # addition of integers",
-                f"j label{labels} # finish",
-                "",
-                f"label{labels-1}: # list", #
-                "# concatenate lists",
-                "lw $t3,0($t1) # 4*n1",
-                "lw $t4,0($t2) # 4*n2",
-                "add $t5,$t3,$t4 # 4*(n1+n2)",
-                "add $t0,$s5,$zero # our new thing to return",
-                "add $s5,$s5,$t5 # s5 += 4*(n1+n2)",
-                "addi $s5,$s5,4 # s5 += 4",
-                "sw $t5,0($t0) # store size first",
-                "add $t6,$t0,$zero",
-                "# Add stuff from first list to new allocated space",
-                f"label_t1_{labels}:",
-                "slt $t7,$zero,$t3 # t3 > 0",
-                f"beq $t7,$zero,label_t2_{labels} # done adding",
-                "addi $t6,$t6,4",
-                "addi $t1,$t1,4",
-                "lw $t7,0($t1)",
-                "sw $t7,0($t6)",
-                "addi $t3,$t3,-4",
-                f"j label_t1_{labels}",
-                f"label_t2_{labels}: # add struff from second list",
-                "slt $t7,$zero,$t4 # t3 > 0",
-                f"beq $t7,$zero,label_t2_end_{labels} # done adding",
-                "addi $t6,$t6,4",
-                "addi $t2,$t2,4",
-                "lw $t7,0($t2)",
-                "sw $t7,0($t6)",
-                "addi $t4,$t4,-4",
-                f"j label_t2_{labels}",
-                f"label_t2_end_{labels}: # end adding from 2nd list",
-                "add $t1,$t0,$zero",
-                "",
-                f"label{labels}: # finish", #
-            ])
+            return open("helpers/add.s").read().format(labels = labels,labelsm1 = labels-1,labelsm2 = labels-2,labelsm3 = labels-3)
+            #return "\n".join([
+            #    "# if t1 is a list or t2 is a list, then jump",
+            #    "srl $t3,$t1,30",
+            #    f"beq $t3,$t8,label{labels-1}",
+            #    "srl $t3,$t2,30",
+            #    f"beq $t3,$t8,label{labels-1}",
+            #    "# ensure type is int",
+            #    "addi $t4,$t4,7",
+            #    "srl $t3,$t1,29",
+            #    f"beq $t3,$t4,label{labels-3}",
+            #    f"beq $t3,$zero,label{labels-3}",
+            #    "j error",
+            #    f"label{labels-3}: # t1 is ok", #
+            #    "srl $t3,$t2,29",
+            #    f"beq $t3,$t4,label{labels-2}",
+            #    f"beq $t3,$zero,label{labels-2}",
+            #    "j error",
+            #    f"label{labels-2}: # t2 is ok", #
+            #    "add $t1,$t1,$t2 # addition of integers",
+            #    f"j label{labels} # finish",
+            #    "",
+            #    f"label{labels-1}: # list", #
+            #    "# concatenate lists",
+            #    "lw $t3,0($t1) # 4*n1",
+            #    "lw $t4,0($t2) # 4*n2",
+            #    "add $t5,$t3,$t4 # 4*(n1+n2)",
+            #    "add $t0,$s5,$zero # our new thing to return",
+            #    "add $s5,$s5,$t5 # s5 += 4*(n1+n2)",
+            #    "addi $s5,$s5,4 # s5 += 4",
+            #    "sw $t5,0($t0) # store size first",
+            #    "add $t6,$t0,$zero",
+            #    "# Add stuff from first list to new allocated space",
+            #    f"label_t1_{labels}:",
+            #    "slt $t7,$zero,$t3 # t3 > 0",
+            #    f"beq $t7,$zero,label_t2_{labels} # done adding",
+            #    "addi $t6,$t6,4",
+            #    "addi $t1,$t1,4",
+            #    "lw $t7,0($t1)",
+            #    "sw $t7,0($t6)",
+            #    "addi $t3,$t3,-4",
+            #    f"j label_t1_{labels}",
+            #    f"label_t2_{labels}: # add struff from second list",
+            #    "slt $t7,$zero,$t4 # t3 > 0",
+            #    f"beq $t7,$zero,label_t2_end_{labels} # done adding",
+            #    "addi $t6,$t6,4",
+            #    "addi $t2,$t2,4",
+            #    "lw $t7,0($t2)",
+            #    "sw $t7,0($t6)",
+            #    "addi $t4,$t4,-4",
+            #    f"j label_t2_{labels}",
+            #    f"label_t2_end_{labels}: # end adding from 2nd list",
+            #    "add $t1,$t0,$zero",
+            #    "",
+            #    f"label{labels}: # finish", #
+            #])
 
 class Term(MultipleBinaryOperation):
     """
@@ -1684,33 +1687,30 @@ class ExponentTower(MultipleBinaryOperation):
         old1 =  L[0].MIPS()
         old2 = L[2].MIPS()
         labels += 1
-        return "\n".join([
+        return "\n ".join([
             old1,
-            "",
             old2,
-            "",
-            "lw $t2,0($s1)",
-            "addi $s1,$s1,4",
-            "lw $t1,0($s1)",
-
-            "# fast exponentiation",
-            "add $t4,$t8,$zero # t4 = 1",
-            f"label{labels}_loop:",
-            f"beq $t2,$zero,label{labels}_out",
-            "and $t3,$t2,$t8",
-            f"beq $t3,$zero,label{labels}_in",
-            "mult $t4,$t1",
-            "mflo $t4 # t4 = t4*t1",
-            f"label{labels}_in: # mult done",
-            "mult $t1,$t1",
-            "mflo $t1 # square",
-            "srl $t2,$t2,1",
-            f"j label{labels}_loop",
-            f"label{labels}_out:",
-            "add $t1,$t4,$zero",
-            "# end exponentiation",
-
-            "sw $t1,0($s1)"
+            open("helpers/exp.s").read().format(labels=labels),
+            #"lw $t2,0($s1)",
+            #"addi $s1,$s1,4",
+            #"lw $t1,0($s1)",
+            #"# fast exponentiation",
+            #"add $t4,$t8,$zero # t4 = 1",
+            #f"label{labels}_loop:",
+            #f"beq $t2,$zero,label{labels}_out",
+            #"and $t3,$t2,$t8",
+            #f"beq $t3,$zero,label{labels}_in",
+            #"mult $t4,$t1",
+            #"mflo $t4 # t4 = t4*t1",
+            #f"label{labels}_in: # mult done",
+            #"mult $t1,$t1",
+            #"mflo $t1 # square",
+            #"srl $t2,$t2,1",
+            #f"j label{labels}_loop",
+            #f"label{labels}_out:",
+            #"add $t1,$t4,$zero",
+            #"# end exponentiation",
+            #"sw $t1,0($s1)"
         ])
 
 class SignedValue(UnaryOperation):
@@ -1887,29 +1887,30 @@ class Algorithm(Node):
         labels += 2
         start = f"label{labels-1}"
         end = f"label{labels}"
-        to_ret = "\n".join([
-            "# Algorithm",
-            f"jal pathfinder # find path of next line",
-            f"addi $t1,$t1,24",
-            "li $t2,0xA0000000",
-            "or $t1,$t1,$t2",
-            f"addi $s1,$s1,-4",
-            f"sw $t1,0($s1)",
-            f"j {end} # skip function",
-            f"{start}:","",
-            arg,"",code,"",
-            "# return whatever is on the top of stack",
-            "lw $t0,0($s0)",
-
-            #"lw $t1,0($s1)",
-            #"sw $t1,0($s0)",
-            "addi $t9,$zero,0",
-
-            "add $s1,$s0,$zero",
-            "add $s0,$zero,$t0",
-            "jr $ra",
-            f"{end}: # end of function"
-        ])
+        #to_ret = "\n".join([
+        #    "# Algorithm",
+        #    f"jal pathfinder # find path of next line",
+        #    f"addi $t1,$t1,24",
+        #    "li $t2,0xA0000000",
+        #    "or $t1,$t1,$t2",
+        #    f"addi $s1,$s1,-4",
+        #    f"sw $t1,0($s1)",
+        #    f"j {end} # skip function",
+        #    f"{start}:",
+        #    "",
+        #    arg,
+        #    "",
+        #    code,
+        #    "",
+        #    "# return whatever is on the top of stack",
+        #    "lw $t0,0($s0)",
+        #    "addi $t9,$zero,0",
+        #    "add $s1,$s0,$zero",
+        #    "add $s0,$zero,$t0",
+        #    "jr $ra",
+        #    f"{end}: # end of function",
+        #])
+        to_ret = open("helpers/alg.s").read().format(start=start,end=end,code=code,arg=arg)
         SYMBOLSTACK.pop()
         return to_ret
 
@@ -2046,48 +2047,53 @@ class FunctionCall(Node):
         getaddress = L[0].MIPS()
         getargs = L[2].MIPS(True)
         N = len(L[2].children[::2])
-        return "\n".join([
-            getaddress,# Also puts current base value in $t0
-            "",
+        return " \n".join([
+            getaddress,
             TypeCheck("alg"),
-            "",
-            "lw $t1, 0($s1)",
-            "li $t2,0x1FFFFFFF",
-            "and $t1, $t1, $t2",
-            "sw $t1, 0($s1)",
-            "",
-            "# function called",
-            "sw $ra,-4($s1)",
-            "addi $s1,$s1,-4", # This is where $s0 will be stored eventually
-            "",
-            "# Getting Arguments",
-            "",
-            "# first argument is the creator base, currently available in $t0",
-            "addi $s1,$s1,-4",
-            "sw $t0,0($s1)",
-            "",
-            getargs, #assuming that every argument is only one word
-            "",
-            "# Making a stack frame",
-            f"addi $s1,$s1,{4*N+4}",
-            "lw $t2,4($s1)",
-            "lw $t1,0($s1)",
-            "sw $t1,4($s1)",
-            "sw $s0,0($s1)",
-            "add $s0,$s1,$zero",
-            f"addi $s1,$s1,{-4*N-4}",
-            "",
-            "# jumping to the function",
-            "jal pathfinder",
-            "addi $ra,$t1,8 # $ra points to the next to next instruction",
-            f"jr $t2",
-            "",
-            "# getting the return value",
-            "lw $t1,0($s1)",
-            "addi $s1,$s1,4",
-            "lw $ra,0($s1)",
-            "sw $t1,0($s1)",
+            open("helpers/fcall.s").read().format(getargs=getargs,p4Np4=4*N+4,m4Nm4=-4*N-4)
         ])
+        #return "\n".join([
+        #    getaddress,# Also puts current base value in $t0
+        #    "",
+        #    TypeCheck("alg"),
+        #    "",
+        #    "lw $t1, 0($s1)",
+        #    "li $t2,0x1FFFFFFF",
+        #    "and $t1, $t1, $t2",
+        #    "sw $t1, 0($s1)",
+        #    "",
+        #    "# function called",
+        #    "sw $ra,-4($s1)",
+        #    "addi $s1,$s1,-4", # This is where $s0 will be stored eventually
+        #    "",
+        #    "# Getting Arguments",
+        #    "",
+        #    "# first argument is the creator base, currently available in $t0",
+        #    "addi $s1,$s1,-4",
+        #    "sw $t0,0($s1)",
+        #    "",
+        #    getargs, #assuming that every argument is only one word
+        #    "",
+        #    "# Making a stack frame",
+        #    f"addi $s1,$s1,{4*N+4}",
+        #    "lw $t2,4($s1)",
+        #    "lw $t1,0($s1)",
+        #    "sw $t1,4($s1)",
+        #    "sw $s0,0($s1)",
+        #    "add $s0,$s1,$zero",
+        #    f"addi $s1,$s1,{-4*N-4}",
+        #    "",
+        #    "# jumping to the function",
+        #    "jal pathfinder",
+        #    "addi $ra,$t1,8 # $ra points to the next to next instruction",
+        #    f"jr $t2",
+        #    "",
+        #    "# getting the return value",
+        #    "lw $t1,0($s1)",
+        #    "addi $s1,$s1,4",
+        #    "lw $ra,0($s1)",
+        #    "sw $t1,0($s1)",
+        #])
 
 class Assignable(Node):
     """
@@ -2154,34 +2160,37 @@ class Assignable(Node):
         if n ==1: return L[0].MIPS(up)
         assert n == 4
         getindex = L[2].MIPS()
+        m4v = -4*v
         if not up:return "\n".join([
             "# Getting index",
             getindex,
             "",
-            "lw $t2,0($s1) # load index",
-            "sll $t2,$t2,2 # t2 = t2*4",
-            f"lw $t0,{-4*v}($s0) # load pointer value",
-            "srl $t1,$t0,30 # a lil bit of type checking",
-            "bne $t1,$t8,error # type check over",
-            "add $t0,$t2,$t0 # get address",
-            "addi $t0,$t0,4 # still getting address..",
-            "lw $t1,0($t0) # get value at index",
-            "sw $t1,0($s1) # replace index on stack with value"
+            open("helpers/index_get.s").read().format(m4v=m4v),
+            # "lw $t2,0($s1) # load index",
+            # "sll $t2,$t2,2 # t2 = t2*4",
+            # f"lw $t0,{m4v}($s0) # load pointer value",
+            # "srl $t1,$t0,30 # a lil bit of type checking",
+            # "bne $t1,$t8,error # type check over",
+            # "add $t0,$t2,$t0 # get address",
+            # "addi $t0,$t0,4 # still getting address..",
+            # "lw $t1,0($t0) # get value at index",
+            # "sw $t1,0($s1) # replace index on stack with value"
             ])
         else:return "\n".join([
             "# Getting index",
             getindex,
             "",
-            "lw $t2,0($s1) # load index",
-            "sll $t2,$t2,2 # t2=t2*4",
-            f"lw $t0,{-4*v}($s0) # load pointer",
-            "srl $t1,$t0,30 # a lil bit of type checking",
-            "bne $t1,$t8,error # type check over",
-            "lw $t1,4($s1) # load value to be assignment",
-            "add $t0,$t2,$t0 # get address on memory location",
-            "addi $t0,$t0,4 # still getting address..",
-            "sw $t1,0($t0) # store value to address",
-            "addi $s1,$s1,8 #clear both index and value",
+            open("helpers/index_set.s").read().format(m4v=m4v),
+            # "lw $t2,0($s1) # load index",
+            # "sll $t2,$t2,2 # t2=t2*4",
+            # f"lw $t0,{m4v}($s0) # load pointer",
+            # "srl $t1,$t0,30 # a lil bit of type checking",
+            # "bne $t1,$t8,error # type check over",
+            # "lw $t1,4($s1) # load value to be assignment",
+            # "add $t0,$t2,$t0 # get address on memory location",
+            # "addi $t0,$t0,4 # still getting address..",
+            # "sw $t1,0($t0) # store value to address",
+            # "addi $s1,$s1,8 #clear both index and value",
             ])
 
 class Deletion(Node):
