@@ -2240,77 +2240,9 @@ def ToMIPS(s:str,output_file=None,Format="spim"):
         PrintError(res)
         return
     mips_code = s0.MIPS()
-    if Format == "cpulator":
-        mips_code = "\n".join([
-            "# This code can be run on this MIPS simulator :",
-            "# https://cpulator.01xz.net/?sys=mipsr5-spim",
-            "",
-            ".global _start",
-            "",
-            "pathfinder:",
-            "add $t1,$ra,$zero",
-            "jr $ra",
-            "",
-            "_start:",
-            "li $s0,0x40000000", # make some space
-            "li $s5,0x60000000", # This is our heap pointer. The start has to be 011, so that it is compatible with spim
-            "",
-            mips_code,
-            "",
-            "# print newline via syscall 11 to clean up",
-            "addi $a0, $zero, 10",
-            "addi $v0, $zero, 11 ",
-            "syscall",
-            "theend:",
-            "# Exit via syscall 10",
-            "addi $v0,$zero,10",
-            "syscall #10",
-            "error:",
-            "addi $a0, $zero, -1",
-            "addi $v0, $zero, 1",
-            "syscall",
-            "# Exit via syscall 10",
-            "addi $v0,$zero,10",
-            "syscall #10",
-        ])
-    elif Format == "spim":
-        mips_code = "\n".join([
-            "# This code can be run on the SPIM simulator. It can be installed on debian/ubuntu as :",
-            "# `sudo apt-get install spim`",
-            "# Then, you can run the code as `spim -f <filename>`",
-            "",
-            ".data",
-            ".text",
-            ".globl main",
-            "",
-            "pathfinder:",
-            "add $t1,$ra,$zero",
-            "jr $ra",
-            "",
-            "main:",
-            "addi $s0,$sp,0", # make some space
-            "addi $s5,$sp,4", # This is our heap pointer
-            "",
-            mips_code,
-            "",
-            "# print newline via syscall 11 to clean up",
-            "addi $a0, $0, 10",
-            "addi $v0, $0, 11 ",
-            "syscall",
-            "theend:",
-            "# Exit via syscall 10",
-            "addi $v0,$zero,10",
-            "syscall #10",
-            "error:",
-            "addi $a0, $zero, -1",
-            "addi $v0, $zero, 1",
-            "syscall",
-            "# Exit via syscall 10",
-            "addi $v0,$zero,10",
-            "syscall #10",
-        ]) 
-    else:
-        raise ValueError("Unsupported format for output code")
+    if Format == "cpulator":mips_code = open("helpers/cpulator.s").read().format(mips_code=mips_code)
+    elif Format == "spim":mips_code = open("helpers/spim.s").read().format(mips_code=mips_code)
+    else:raise ValueError("Unsupported format for output code")
     if output_file is not None:
         if output_file[-2:] != ".s": output_file = output_file + ".s"
         f=open(output_file,'w')
