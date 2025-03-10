@@ -95,25 +95,35 @@ sw $t1,0($s1) # replace index on stack with valu
 lw $t0, 0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label2 # 000 -> int
-beq $t1,$t3,label2 # 111 -> int
-srl $t1,$t1,1
-bne $t1,$t8,error # 010 or 011 are for str and list
+beq $t1,$zero,label3 # 000 -> int
+beq $t1,$t3,label3 # 111 -> int
+addi $t3,$zero,3
+bne $t1,$t3,label2 # 011 is for str
+
+# print a string
 lw $t1,0($t0) # 4n
-addi $v0,$zero,11 # str
+addi $v0,$zero,11 # for printing characters
 label1: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label3 # if t1 <= 0, finish
+beq $t3,$zero,label4 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label1 # continue printing charactters
-label2:# int
-addi $v0, $zero,1
+j label1 # continue printing characters
+
+label2:#print float
+addi $v0,$zero,2
+mtc1 $t0,$f12
+syscall
+j label4
+
+label3:#print int
+addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
-label3:# end print
+
+label4:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10
@@ -134,25 +144,35 @@ sw $t1,0($s1)
 lw $t0, 0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label5 # 000 -> int
-beq $t1,$t3,label5 # 111 -> int
-srl $t1,$t1,1
-bne $t1,$t8,error # 010 or 011 are for str and list
+beq $t1,$zero,label7 # 000 -> int
+beq $t1,$t3,label7 # 111 -> int
+addi $t3,$zero,3
+bne $t1,$t3,label6 # 011 is for str
+
+# print a string
 lw $t1,0($t0) # 4n
-addi $v0,$zero,11 # str
-label4: # print character routine
+addi $v0,$zero,11 # for printing characters
+label5: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label6 # if t1 <= 0, finish
+beq $t3,$zero,label8 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label4 # continue printing charactters
-label5:# int
-addi $v0, $zero,1
+j label5 # continue printing characters
+
+label6:#print float
+addi $v0,$zero,2
+mtc1 $t0,$f12
+syscall
+j label8
+
+label7:#print int
+addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
-label6:# end print
+
+label8:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10
