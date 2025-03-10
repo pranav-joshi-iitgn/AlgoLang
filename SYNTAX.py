@@ -2,6 +2,7 @@ from LEXER import *
 #from ast import literal_eval #for strings only
 import termplotlib as plt #for `plot` statement
 from numpy import * #for vectors
+import struct
 
 # global variable for visualisation of AST
 from graphviz import Digraph
@@ -16,10 +17,10 @@ FAST = False
 
 TYPES = {
     "int":["000","111"],
-    "float":["100"], # let's.. just not do this..
-    "str":["010","011"],
-    "list":["010","011"],
-    "alg":["101"],
+    "float":["001","010","101","110"],
+    "str":["011"],
+    "list":["011"],
+    "alg":["100"],
 }
 
 def to_tuple(L):
@@ -126,6 +127,17 @@ class Float(Number):
     name = "float"
     Type = float
     def eval(self):return float(self.value)
+    def MIPS(self):
+        v = float(self.value)
+        v = ''.join('{:08b}'.format(b) for b in struct.pack('>f', v))
+        if v[:3] not in TYPES["float"]: raise RuntimeError(f"{self.value} is too large or small")
+        v = int(v,2)
+        return "\n".join([
+            f"# float {self.value}",
+            "addi $s1,$s1,-4",
+            f"li $t1,{v}",
+            "sw $t1,0($s1)"
+        ])
 
 class Str(Token):
     name = "str"
@@ -368,12 +380,15 @@ class UnaryOperation(Node):
         assert n > 0
         if n == 1:return L[0].MIPS()
         elif n == 2:
+            op = self.mips_op
+            if not isinstance(op,str):op = op()
             old = L[1].MIPS()
             return "\n".join([
                 old,
                 "",
+                f"# {self.op}",
                 "lw $t1,0($s1)",
-                self.mips_op,
+                op,
                 "sw $t1,0($s1)"
             ])
 
@@ -1163,11 +1178,12 @@ class PrintStatement(Node):
         global labels
         L = self.children
         getval = L[1].MIPS()
-        labels += 3
+        labels += 4
         return getval + "\n" + open("helpers/print.s").read().format(
             labels=labels,
             labelsm1=labels-1,
-            labelsm2=labels-2
+            labelsm2=labels-2,
+            labelsm3=labels-3
         )
 
 class PlotStatement(Node):
@@ -1428,7 +1444,7 @@ class Comparison(MultipleBinaryOperation):
         if operation == "!=" : return x != y
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
-    mips_op = {
+    mips_op = { # I won't allow comparisons between floats.. that is one messed up thing.
         "==":"\n".join([
                 "slt $t3,$t1,$t2", # x < y
                 "slt $t2,$t2,$t1", # x > y
@@ -1469,16 +1485,15 @@ class Expression(MultipleBinaryOperation):
     
     def mips_op(self,op:str):
         global labels,FAST
-        if op == "-":return "sub $t1,$t1,$t2"
-        elif op == "+":
-            if FAST:return "add $t1,$t1,$t2"
-            labels += 4
-            return open("helpers/add.s").read().format(
-                labels = labels,
-                labelsm1 = labels-1,
-                labelsm2 = labels-2,
-                labelsm3 = labels-3
-            )
+        op = {"+":"add","-":"sub"}[op]
+        if FAST:return f"{op} $t1,$t1,$t2"
+        labels += 4
+        return open(f"helpers/{op}.s").read().format(
+            labels = labels,
+            labelsm1 = labels-1,
+            labelsm2 = labels-2,
+            labelsm3 = labels-3
+        )
 
 class Term(MultipleBinaryOperation):
     """
@@ -1501,7 +1516,7 @@ class Term(MultipleBinaryOperation):
         if operation == "mod" : return x%y
         else:raise ValueError(f"unrecognised binary operation {operation}")
 
-    mips_op = {
+    mips_op_old = {
         "*":"\n".join([
             "mult $t1,$t2",
             "mflo $t1",
@@ -1509,13 +1524,13 @@ class Term(MultipleBinaryOperation):
         ]),
         "/":"\n".join([
             "div $t1,$t2",
-            "mfhi $t2",
             "mflo $t1",
+            "mfhi $t2",
         ]),
         "//":"\n".join([
             "div $t1,$t2",
-            "mfhi $t2",
             "mflo $t1",
+            "mfhi $t2",
         ]),
         "%":"\n".join([
             "div $t1,$t2",
@@ -1533,6 +1548,27 @@ class Term(MultipleBinaryOperation):
             "mfhi $t1",
         ]),
     }
+
+    def mips_op(self,op:str):
+        global labels
+        if op == "*":
+            #TODO:add support for integer times string
+            labels += 4
+            return open("helpers/mul.s").read().format(
+                labels = labels,
+                labelsm1 = labels - 1,
+                labelsm2 = labels - 2,
+                labelsm3 = labels - 3
+            )
+        elif op == "/":
+            labels += 4
+            return open("helpers/div.s").read().format(
+                labels = labels,
+                labelsm1 = labels - 1,
+                labelsm2 = labels - 2,
+                labelsm3 = labels - 3
+            )
+        else: return self.mips_op_old[op]
 
 class ExponentTower(MultipleBinaryOperation):
     """
@@ -1572,7 +1608,11 @@ class SignedValue(UnaryOperation):
     def other(self):return EnclosedValues()
     def op(self,x):return -x
 
-    mips_op = "sub $t1,$zero,$t1"
+    #mips_op = "sub $t1,$zero,$t1"
+    def mips_op(self):
+        global labels
+        labels += 1
+        return open("helpers/unary_sign.s").read().format(labels=labels)
 
 class EnclosedValues(Node):
     """
@@ -2213,7 +2253,7 @@ def ToMIPS(s:str,output_file=None,Format="spim"):
             "",
             "_start:",
             "li $s0,0x40000000", # make some space
-            "li $s5,0x40000004", # This is our heap pointer
+            "li $s5,0x60000000", # This is our heap pointer. The start has to be 011, so that it is compatible with spim
             "",
             mips_code,
             "",
