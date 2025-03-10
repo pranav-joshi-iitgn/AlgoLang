@@ -1,7 +1,7 @@
 # Algorithm
 jal pathfinder # find path of next line
 addi $t1,$t1,24
-li $t2,0xA0000000
+li $t2,0x80000000
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)

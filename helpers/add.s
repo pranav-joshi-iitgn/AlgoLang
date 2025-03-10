@@ -1,22 +1,46 @@
 # if t1 is a list or t2 is a list, then jump
-srl $t3,$t1,30
-beq $t3,$t8,label{labelsm1}
-srl $t3,$t2,30
-beq $t3,$t8,label{labelsm1}
-# ensure type is int
+addi $t4,$zero,3
+srl $t3,$t2,29
+beq $t3,$t4,label{labelsm1}
+srl $t3,$t1,29
+beq $t3,$t4,label{labelsm1}
+
+# assume both types are int
+add $t7,$zero,$zero # assume t1 is not a float
 addi $t4,$t4,7
 srl $t3,$t1,29
 beq $t3,$t4,label{labelsm3}
 beq $t3,$zero,label{labelsm3}
-j error
-label{labelsm3}: # t1 is ok
+addi $t7,$zero,1 # we know now that t1 is a float
+
+label{labelsm3}: # t1 is int
 srl $t3,$t2,29
 beq $t3,$t4,label{labelsm2}
 beq $t3,$zero,label{labelsm2}
-j error
-label{labelsm2}: # t2 is ok
-add $t1,$t1,$t2 # addition of integers
+# t2 is a float now
+mtc1 $t1,$f1
+mtc1 $t2,$f2
+bne $t7,$zero,label_float{labelsm2} # if t1 was a float too, jump to adition
+cvt.s.w $f1,$f1 # if not, convert t1 to float
+j label_float{labelsm2} # j to float addition
+
+label{labelsm2}: # t2 is int
+bne $t7,$zero,label_float_conv{labelsm2} # if t1 was a float, jump to conversion
+
+label_int{labelsm2}: # int addition
+add $t1,$t1,$t2
 j label{labels} # finish
+
+label_float_conv{labelsm2}: # conversion of t2 to float
+mtc1 $t1,$f1
+mtc1 $t2,$f2
+cvt.s.w $f2,$f2
+
+label_float{labelsm2}: # float addition
+add.s $f1,$f1,$f2
+mfc1 $t1,$f1
+j label{labels} #finish
+
 
 label{labelsm1}: # list
 # concatenate lists
