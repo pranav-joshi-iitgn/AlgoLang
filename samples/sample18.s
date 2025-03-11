@@ -21,10 +21,7 @@ addi $t1,$t1,16
 li $t2,0x80000000
 or $t1,$t1,$t2
 sw $t1,-8($s0)
-
 thestart:
-addi $t8,$zero,1
-addi $t9,$zero,1
 
 # Definition : f is -16($s0)
 
@@ -37,8 +34,8 @@ li $t2,0x80000000
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label19 # skip function
-label18:
+j label13 # skip function
+label12:
 
 # x is -16($s0)
 
@@ -87,6 +84,12 @@ jr $ra
 
 addi $t9,$zero,1
 label1: # end if
+
+# getting x
+add $t0,$s0,$zero
+addi $s1,$s1,-4
+lw $t1,-16($t0)
+sw $t1,0($s1)
 
 # getting f
 add $t0,$s0,$zero
@@ -245,93 +248,6 @@ lw $ra,0($s1)
 sw $t1,0($s1)
 
 
-# getting f
-add $t0,$s0,$zero
-li $t5,0x7F000000
-li $t6,0x1FFFFFFF
-lw $t1,-8($t0) # self
-and $t1,$t1,$t6
-or $t1,$t1,$t5
-lw $t2,0($t1) # parent
-lw $t0,-4($t0)
-lw $t3,-8($t0) # self_new
-beq $t3,$t2,label8
-#Print parent dead
-addi $v0,$zero,11
-addi $a0,$zero,112 #p
-syscall
-addi $a0,$zero,97 #a
-syscall
-addi $a0,$zero,114 #r
-syscall
-addi $a0,$zero,101 #e
-syscall
-addi $a0,$zero,110 #n
-syscall
-addi $a0,$zero,116 #t
-syscall
-addi $a0,$zero,32 # 
-syscall
-addi $a0,$zero,100 #d
-syscall
-addi $a0,$zero,101 #e
-syscall
-addi $a0,$zero,97 #a
-syscall
-addi $a0,$zero,100 #d
-syscall
-addi $a0,$zero,10 # newline
-syscall
-
-j error
-label8:# creator is still alive
-addi $s1,$s1,-4
-lw $t1,-16($t0)
-sw $t1,0($s1) 
-# assert type is alg
-lw $t1,0($s1)
-srl $t1,$t1,29
-addi $t2,$zero,4
-beq $t1,$t2,label13
-j error # if wrong type
-label13:# type check over 
-
-lw $t1, 0($s1)
-li $t2,0x1FFFFFFF
-and $t3, $t1, $t2
-sw $t3, 0($s1)
-
-# function called
-sw $ra,-4($s1)
-addi $s1,$s1,-4
-
-# Getting Arguments
-
-# first argument is the creator base, currently available in $t0
-addi $s1,$s1,-4
-sw $t0,0($s1)
-
-# second is the value of this function, currently available in $t1
-addi $s1,$s1,-4
-sw $t1,0($s1)
-
-# third is the value of the parent, available at -8($t0)
-addi $s1,$s1,-4
-lw $t2,-8($t0)
-sw $t2,0($s1)
-
-# All other arguments
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-16($t0)
-sw $t1,0($s1)
-
-# int 2
-addi $s1,$s1,-4
-li $t1,2
-sw $t1,0($s1)
-
 lw $t2,0($s1)
 addi $s1,$s1,4
 lw $t1,0($s1)
@@ -346,143 +262,41 @@ lw $t1,0($s1)
 add $t7,$zero,$zero 
 addi $t4,$t4,7
 srl $t3,$t1,29
-beq $t3,$t4,label10
-beq $t3,$zero,label10
+beq $t3,$t4,label9
+beq $t3,$zero,label9
 addi $t7,$zero,1 # we know now that t1 is a float
-label10: # t1 is int
+label9: # t1 is int
 
 # Assume t2 is an int
 srl $t3,$t2,29
-beq $t3,$t4,label11
-beq $t3,$zero,label11
+beq $t3,$t4,label10
+beq $t3,$zero,label10
 # t2 is a float now
 mtc1 $t1,$f1
 mtc1 $t2,$f2
-bne $t7,$zero,label_float11 # if t1 was a float too, jump to adition
+bne $t7,$zero,label_float10 # if t1 was a float too, jump to adition
 cvt.s.w $f1,$f1 # if not, convert t1 to float
-j label_float11 # j to float subtraction
+j label_float10 # j to float operation
 
-label11: # t2 is int
-bne $t7,$zero,label_float_conv11 # if t1 was a float, jump to conversion
+label10: # t2 is int
+bne $t7,$zero,label_float_conv10 # if t1 was a float, jump to conversion
 
-label_int11: # int subtraction
-sub $t1,$t1,$t2
-j label12 # finish
+label_int10: # int multiplication
+mult $t1,$t2
+mflo $t1
+mfhi $t2
+j label11 # finish
 
-label_float_conv11: # conversion of t2 to float
+label_float_conv10: # conversion of t2 to float
 mtc1 $t1,$f1
 mtc1 $t2,$f2
 cvt.s.w $f2,$f2
 
-label_float11: # float subtraction
-sub.s $f1,$f1,$f2
+label_float10: # float multiplication
+mul.s $f1,$f1,$f2
 mfc1 $t1,$f1
 
-label12: # finish
-sw $t1,0($s1)
-
-# Making a stack frame
-addi $s1,$s1,16
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
-add $s0,$s1,$zero
-addi $s1,$s1,-16
-
-# jumping to the function
-jal pathfinder
-addi $ra,$t1,8 # $ra points to the next to next instruction
-jr $t2
-
-# getting the return value
-lw $t1,0($s1)
-addi $s1,$s1,4
-lw $ra,0($s1)
-sw $t1,0($s1)
-
-
-lw $t2,0($s1)
-addi $s1,$s1,4
-lw $t1,0($s1)
-# if t1 is a list or t2 is a list, then jump
-addi $t4,$zero,3
-srl $t3,$t2,29
-beq $t3,$t4,label16
-srl $t3,$t1,29
-beq $t3,$t4,label16
-
-# assume both types are int
-add $t7,$zero,$zero # assume t1 is not a float
-addi $t4,$t4,7
-srl $t3,$t1,29
-beq $t3,$t4,label14
-beq $t3,$zero,label14
-addi $t7,$zero,1 # we know now that t1 is a float
-
-label14: # t1 is int
-srl $t3,$t2,29
-beq $t3,$t4,label15
-beq $t3,$zero,label15
-# t2 is a float now
-mtc1 $t1,$f1
-mtc1 $t2,$f2
-bne $t7,$zero,label_float15 # if t1 was a float too, jump to adition
-cvt.s.w $f1,$f1 # if not, convert t1 to float
-j label_float15 # j to float addition
-
-label15: # t2 is int
-bne $t7,$zero,label_float_conv15 # if t1 was a float, jump to conversion
-
-label_int15: # int addition
-add $t1,$t1,$t2
-j label17 # finish
-
-label_float_conv15: # conversion of t2 to float
-mtc1 $t1,$f1
-mtc1 $t2,$f2
-cvt.s.w $f2,$f2
-
-label_float15: # float addition
-add.s $f1,$f1,$f2
-mfc1 $t1,$f1
-j label17 #finish
-
-
-label16: # list
-# concatenate lists
-lw $t3,0($t1) # 4*n1
-lw $t4,0($t2) # 4*n2
-add $t5,$t3,$t4 # 4*(n1+n2)
-add $t0,$s5,$zero # our new thing to return
-add $s5,$s5,$t5 # s5 += 4*(n1+n2)
-addi $s5,$s5,4 # s5 += 4
-sw $t5,0($t0) # store size first
-add $t6,$t0,$zero
-# Add stuff from first list to new allocated space
-label_t1_17:
-slt $t7,$zero,$t3 # t3 > 0
-beq $t7,$zero,label_t2_17 # done adding
-addi $t6,$t6,4
-addi $t1,$t1,4
-lw $t7,0($t1)
-sw $t7,0($t6)
-addi $t3,$t3,-4
-j label_t1_17
-label_t2_17: # add struff from second list
-slt $t7,$zero,$t4 # t3 > 0
-beq $t7,$zero,label_t2_end_17 # done adding
-addi $t6,$t6,4
-addi $t2,$t2,4
-lw $t7,0($t2)
-sw $t7,0($t6)
-addi $t4,$t4,-4
-j label_t2_17
-label_t2_end_17: # end adding from 2nd list
-add $t1,$t0,$zero
-
-label17: # finish
-
+label11: # finish
 sw $t1,0($s1)
 # return
 lw $t0,0($s0)
@@ -501,7 +315,7 @@ addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label19: # end of function
+label13: # end of function
 
 # Add this to parent pointer tree
 lw $t2,-8($s0) # parent
@@ -526,9 +340,9 @@ sw $t1,0($s1)
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label20
+beq $t1,$t2,label14
 j error # if wrong type
-label20:# type check over 
+label14:# type check over 
 
 lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
@@ -585,35 +399,35 @@ sw $t1,0($s1)
 lw $t0, 0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label23 # 000 -> int
-beq $t1,$t3,label23 # 111 -> int
+beq $t1,$zero,label17 # 000 -> int
+beq $t1,$t3,label17 # 111 -> int
 addi $t3,$zero,3
-bne $t1,$t3,label22 # 011 is for str
+bne $t1,$t3,label16 # 011 is for str
 
 # print a string
 lw $t1,0($t0) # 4n
 addi $v0,$zero,11 # for printing characters
-label21: # print character routine
+label15: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label24 # if t1 <= 0, finish
+beq $t3,$zero,label18 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label21 # continue printing characters
+j label15 # continue printing characters
 
-label22:#print float
+label16:#print float
 addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
-j label24
+j label18
 
-label23:#print int
+label17:#print int
 addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
 
-label24:# end print
+label18:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10

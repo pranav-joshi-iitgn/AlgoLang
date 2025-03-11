@@ -1,3 +1,3 @@
 let f = alg(x,y){print y;}; #comment
 let x = 1;
-run f with 2,"ab";
+run f with x,"ab";

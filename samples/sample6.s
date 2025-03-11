@@ -11,18 +11,26 @@ add $t1,$ra,$zero
 jr $ra
 
 main:
+li $sp,0x60000000
 addi $s0,$sp,0
 addi $s5,$sp,4
+addi $s1,$s0,-20
 
+jal pathfinder
+addi $t1,$t1,16
+li $t2,0x80000000
+or $t1,$t1,$t2
+sw $t1,-8($s0)
+
+thestart:
 addi $t8,$zero,1
 addi $t9,$zero,1
-addi $s1,$s0,-8
 
-# Definition : L0 is -4($s0)
+# Definition : L0 is -16($s0)
 
-# int 6
+# int 10
 addi $s1,$s1,-4
-li $t1,6
+li $t1,10
 sw $t1,0($s1)
 
 # list
@@ -35,32 +43,32 @@ sw $t0,0($s1) # store pointer on stack
 sw $t1,0($t0) # store 4n as first thing
 
 lw $t1,0($s1) # get value
-addi $t0,$s0,-4 # load variable address
+addi $t0,$s0,-16 # load variable address
 sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
-# Definition : L is -8($s0)
+# Definition : L is -20($s0)
 
 # getting L0
 add $t0,$s0,$zero
 addi $s1,$s1,-4
-lw $t1,-4($t0)
+lw $t1,-16($t0)
 sw $t1,0($s1)
 
 # get the elements of list, from left to right
+# float 1.2
+addi $s1,$s1,-4
+li $t1,1067030938
+sw $t1,0($s1)
+
 # int 1
 addi $s1,$s1,-4
 li $t1,1
 sw $t1,0($s1)
 
-# int 2
+# int 1
 addi $s1,$s1,-4
-li $t1,2
-sw $t1,0($s1)
-
-# int 3
-addi $s1,$s1,-4
-li $t1,3
+li $t1,1
 sw $t1,0($s1)
 
 addi $s5, 12 # make space for 4 elements on heap
@@ -83,24 +91,48 @@ lw $t2,0($s1)
 addi $s1,$s1,4
 lw $t1,0($s1)
 # if t1 is a list or t2 is a list, then jump
-srl $t3,$t1,30
-beq $t3,$t8,label3
-srl $t3,$t2,30
-beq $t3,$t8,label3
-# ensure type is int
+addi $t4,$zero,3
+srl $t3,$t2,29
+beq $t3,$t4,label3
+srl $t3,$t1,29
+beq $t3,$t4,label3
+
+# assume both types are int
+add $t7,$zero,$zero # assume t1 is not a float
 addi $t4,$t4,7
 srl $t3,$t1,29
 beq $t3,$t4,label1
 beq $t3,$zero,label1
-j error
-label1: # t1 is ok
+addi $t7,$zero,1 # we know now that t1 is a float
+
+label1: # t1 is int
 srl $t3,$t2,29
 beq $t3,$t4,label2
 beq $t3,$zero,label2
-j error
-label2: # t2 is ok
-add $t1,$t1,$t2 # addition of integers
+# t2 is a float now
+mtc1 $t1,$f1
+mtc1 $t2,$f2
+bne $t7,$zero,label_float2 # if t1 was a float too, jump to adition
+cvt.s.w $f1,$f1 # if not, convert t1 to float
+j label_float2 # j to float addition
+
+label2: # t2 is int
+bne $t7,$zero,label_float_conv2 # if t1 was a float, jump to conversion
+
+label_int2: # int addition
+add $t1,$t1,$t2
 j label4 # finish
+
+label_float_conv2: # conversion of t2 to float
+mtc1 $t1,$f1
+mtc1 $t2,$f2
+cvt.s.w $f2,$f2
+
+label_float2: # float addition
+add.s $f1,$f1,$f2
+mfc1 $t1,$f1
+j label4 #finish
+
 
 label3: # list
 # concatenate lists
@@ -139,19 +171,19 @@ label4: # finish
 sw $t1,0($s1)
 
 lw $t1,0($s1) # get value
-addi $t0,$s0,-8 # load variable address
+addi $t0,$s0,-20 # load variable address
 sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
 # Getting index
-# int 7
+# int 10
 addi $s1,$s1,-4
-li $t1,7
+li $t1,10
 sw $t1,0($s1)
 
 lw $t2,0($s1) # load index
 sll $t2,$t2,2 # t2 = t2*4
-lw $t0,-8($s0) # load pointer value
+lw $t0,-20($s0) # load pointer value
 srl $t1,$t0,30 # a lil bit of type checking
 bne $t1,$t8,error # type check over
 add $t0,$t2,$t0 # get address
@@ -164,25 +196,35 @@ sw $t1,0($s1) # replace index on stack with valu
 lw $t0, 0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label6 # 000 -> int
-beq $t1,$t3,label6 # 111 -> int
-srl $t1,$t1,1
-bne $t1,$t8,error # 010 or 011 are for str and list
+beq $t1,$zero,label7 # 000 -> int
+beq $t1,$t3,label7 # 111 -> int
+addi $t3,$zero,3
+bne $t1,$t3,label6 # 011 is for str
+
+# print a string
 lw $t1,0($t0) # 4n
-addi $v0,$zero,11 # str
+addi $v0,$zero,11 # for printing characters
 label5: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label7 # if t1 <= 0, finish
+beq $t3,$zero,label8 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label5 # continue printing charactters
-label6:# int
-addi $v0, $zero,1
+j label5 # continue printing characters
+
+label6:#print float
+addi $v0,$zero,2
+mtc1 $t0,$f12
+syscall
+j label8
+
+label7:#print int
+addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
-label7:# end print
+
+label8:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10
@@ -200,10 +242,21 @@ theend:
 # Exit via syscall 10
 addi $v0,$zero,10
 syscall #10
-error:
-addi $a0, $zero, -1
-addi $v0, $zero, 1
+error:#Print ERROR
+addi $v0,$zero,11
+addi $a0,$zero,69 #E
 syscall
+addi $a0,$zero,82 #R
+syscall
+addi $a0,$zero,82 #R
+syscall
+addi $a0,$zero,79 #O
+syscall
+addi $a0,$zero,82 #R
+syscall
+addi $a0,$zero,10 # newline
+syscall
+
 # Exit via syscall 10
 addi $v0,$zero,10
 syscall #10

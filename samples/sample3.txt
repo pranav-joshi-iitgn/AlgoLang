@@ -8,12 +8,15 @@ let f = alg(L){
 	L[1] = z;
 	return z;
 };
+
 let F = list 2;
+
 F[0] = 1;
 F[1] = 1;
 
 let i = 0;
-let ret;
+let ret =0 ;
+
 while i < 3 {
 	ret = f(F);
 	i = i + 1;
