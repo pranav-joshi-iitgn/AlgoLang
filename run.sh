@@ -1,5 +1,16 @@
 #!/bin/bash
 
+
+# This is a terminal utility that compiles a given AlgoLang file
+# to MIPS32 instructions (centered around the SPIM simulator).
+# and then executes the .s file using SPIM
+# 
+# AUTHOR: Pranav Joshi
+# email : pranav.joshi@iitgn.ac.in
+# Roll  : 22110197
+
+
+
 if [ $# -eq 0 ]; then
     echo "Usage: $0 <input_file>"
     exit 1
@@ -33,4 +44,4 @@ fi
 
 # Run the compiled file using SPIM
 echo "Running $output_file..."
-spim -f "$output_file" | tail -n +6
+spim -st 33554431 -ss 1577058305 -f "$output_file" | tail -n +6

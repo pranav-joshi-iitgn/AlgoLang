@@ -1,5 +1,17 @@
+"""
+This is the main parser module.
+This contains required classes for AST construction, with each class having these methods
+1. parse : parses given tokens and creates a subtree
+2. eval : tree walk evaluation
+3. MIPS : compilation of subtree's code to MIPS
+There are also helper functions for testing and running.
+
+AUTHOR: Pranav Joshi
+email : pranav.joshi@iitgn.ac.in
+Roll  : 22110197
+"""
+
 from LEXER import *
-#from ast import literal_eval #for strings only
 import termplotlib as plt #for `plot` statement
 from numpy import * #for vectors
 import struct
@@ -204,6 +216,7 @@ class Id(Token):
 
         Note : The "parent" scope in the tree eval parser is just the caller, while in this case, it is the creator of the function.
         """
+        global labels,MIPSPrint
         x = self.value
         N = len(SYMBOLSTACK)
         code = [
@@ -228,7 +241,26 @@ class Id(Token):
                     ])
                 return "\n".join(code)
             else:
-                code.append("lw $t0,-4($t0)")
+                labels +=1
+                code.extend([
+                    "li $t5,0x7F000000",
+                    "li $t6,0x1FFFFFFF",
+                    "lw $t1,-8($t0) # self",
+                    "and $t1,$t1,$t6",
+                    "or $t1,$t1,$t5",
+                    "lw $t2,0($t1) # parent",
+                    "lw $t0,-4($t0)",
+                    "lw $t3,-8($t0) # self_new",
+                    # "and $t3,$t3,$t6",
+                    # "or $t3,$t3,$t5",
+                    # "lw $t4,0($t3) # parent_new",
+                    f"beq $t3,$t2,label{labels}",
+                    MIPSPrint("parent dead"),
+                    "j error",
+                    f"label{labels}:# creator is still alive",
+                    # "add $t1,$t3,$zero",
+                    # "add $t2,$t4,$zero",
+                    ])
         raise RuntimeError(f"variable {x} not found in any scope")
 
 class Block(Node):
@@ -1300,7 +1332,7 @@ class RunStatement(Node):
         return "\n ".join([
             getaddress,# Also puts current base value in $t0
             TypeCheck("alg"),
-            open("helpers/run.s").read().format(getargs=getargs,p4Np4=4*N+4,m4Nm4=-4*N-4)
+            open("helpers/run.s").read().format(getargs=getargs,p4Np12=4*N+12,m4Nm12=-4*N-12)
         ])
 
 class ReturnStatement(Node):
@@ -1766,7 +1798,7 @@ class Algorithm(Node):
     def MIPS(self):
         global labels,SYMBOLSTACK,SymbolsNeeded
         kw,arg,f = self.children
-        SYMBOLSTACK.append({"creator-base":1})
+        SYMBOLSTACK.append({"creator-base":1,"self":2,"parent":3})
         # This is an invalid variable because of the `-`. The name doesn't really matter
         # All that matters is that the user should never be able to access -4($s0) using just the language
         # This is because it holds the base of the creator on this algorithm
@@ -1869,6 +1901,12 @@ def TypeCheck(Type):
     ])
     return to_ret
 
+def MIPSPrint(s:str):
+    code = f"#Print {s}\naddi $v0,$zero,11\n"
+    code += "\n".join([f"addi $a0,$zero,{ord(x)} #{x}\nsyscall" for x in s])
+    code += "\naddi $a0,$zero,10 # newline\nsyscall\n"
+    return code
+
 class FunctionCall(Node):
     """
     Example:
@@ -1895,6 +1933,7 @@ class FunctionCall(Node):
         assert isinstance(f,Block) or isinstance(f,SysCall), f"{left.name} is not callable"
         assert isinstance(right,CommaSeparatedValues)
         SYMBOLS = DEFAULT_SYMBOLS.copy()
+        SYMBOLS["self"] = f
         SYMBOLSTACK.append(SYMBOLS)
         args = right.eval(True)
         if args is None:args = []
@@ -1915,7 +1954,7 @@ class FunctionCall(Node):
         return " \n".join([
             getaddress,
             TypeCheck("alg"),
-            open("helpers/fcall.s").read().format(getargs=getargs,p4Np4=4*N+4,m4Nm4=-4*N-4)
+            open("helpers/fcall.s").read().format(getargs=getargs,p4Np12=4*N+12,m4Nm12=-4*N-12)
         ])
 
 class Assignable(Node):
@@ -2231,17 +2270,20 @@ def TestFile(filename):
     TESTING = old_TESTING
 
 def ToMIPS(s:str,output_file=None,Format="spim"):
-    set_defaults({})
-    set_symbolstack([{}])
+    global MIPSPrint
+    set_defaults({"self":None,"parent":None})
+    set_symbolstack([{"creator-base":1,"self":2,"parent":3}])
     s = lex(s)
     s0 = Statements()
     res = s0.parse(s)
     if isinstance(res,ValueError):
         PrintError(res)
         return
-    mips_code = s0.MIPS()
-    if Format == "cpulator":mips_code = open("helpers/cpulator.s").read().format(mips_code=mips_code)
-    elif Format == "spim":mips_code = open("helpers/spim.s").read().format(mips_code=mips_code)
+    mips_code = s0.MIPS(False)
+    n = len(SYMBOLSTACK[-1])
+    error_log = "error:" + MIPSPrint("ERROR")
+    if Format == "cpulator":mips_code = open("helpers/cpulator.s").read().format(mips_code=mips_code,error_log = error_log,m4n=-4*n)
+    elif Format == "spim":mips_code = open("helpers/spim.s").read().format(mips_code=mips_code,error_log = error_log,m4n=-4*n)
     else:raise ValueError("Unsupported format for output code")
     if output_file is not None:
         if output_file[-2:] != ".s": output_file = output_file + ".s"
