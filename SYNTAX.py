@@ -251,15 +251,17 @@ class Id(Token):
                     "lw $t2,0($t1) # parent",
                     "lw $t0,-4($t0)",
                     "lw $t3,-8($t0) # self_new",
-                    # "and $t3,$t3,$t6",
-                    # "or $t3,$t3,$t5",
-                    # "lw $t4,0($t3) # parent_new",
                     f"beq $t3,$t2,label{labels}",
-                    MIPSPrint("parent dead"),
-                    "j error",
-                    f"label{labels}:# creator is still alive",
-                    # "add $t1,$t3,$zero",
-                    # "add $t2,$t4,$zero",
+                    MIPSPrint("parent dead, checking for fake parent"),
+                    "add $t3,$zero,$t0 # make a copy",
+                    "lw $t0,-12($t0) # fake parent stack",
+                    f"bne $t0,$zero,label{labels} # even the fake parent is dead .. 1 ",
+                    "and $t2,$t2,$t6",
+                    "or $t2,$t2,$t5",
+                    "lw $t0,4($t2) # depend on fake parent",
+                    "beq $t0,$zero,error # even the fake parent is dead ... 2",
+                    "sw $t0,-12($t3) # update the fake parent",
+                    f"label{labels}:# creator alive checking over",
                     ])
         raise RuntimeError(f"variable {x} not found in any scope")
 
@@ -1361,8 +1363,13 @@ class ReturnStatement(Node):
         return L[1].eval()
 
     def MIPS(self,start_label="",end_label=""):
+        global labels
         val = self.children[1]
         val = val.MIPS()
+        labels += 2
+        recreate = True
+        recreate = "" if recreate else "#"
+        return val + "\n" + open("helpers/return.s").read().format(labels=labels,labelsm1=labels-1,recreate=recreate)
         return "\n".join([
             val,
             "# return",
@@ -1798,10 +1805,10 @@ class Algorithm(Node):
     def MIPS(self):
         global labels,SYMBOLSTACK,SymbolsNeeded
         kw,arg,f = self.children
-        SYMBOLSTACK.append({"creator-base":1,"self":2,"parent":3})
-        # This is an invalid variable because of the `-`. The name doesn't really matter
-        # All that matters is that the user should never be able to access -4($s0) using just the language
-        # This is because it holds the base of the creator on this algorithm
+        SYMBOLSTACK.append({"creator-base":1,"self":2,"my-base":3})
+        # This has invalid variables because of the `-`. The name doesn't really matter
+        # All that matters is that the user should never be able to access -4($s0) and -12($s0) using just the language
+        # This is because it holds the base of the creator on this algorithm and base of current algorithm
         arg = arg.MIPS()
         # TODO : Add f.env support so that the function can be returned.
         code = f.MIPS()
