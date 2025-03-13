@@ -18,10 +18,11 @@ sw $t0,0($s1)
 addi $s1,$s1,-4
 sw $t1,0($s1)
 
-# third is the value of the parent, available at -8($t0)
+# third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-lw $t2,-8($t0)
-sw $t2,0($s1)
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
 
 # All other arguments
 {getargs}

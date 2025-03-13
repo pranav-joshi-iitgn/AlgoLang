@@ -29,3 +29,4 @@ li $t6,0x1FFFFFFF
 and $t1,$t1,$t6
 or $t1,$t1,$t5
 sw $t2,0($t1) # child -> parent
+sw $zero,4($t1) # child has null as its copy, since it's not dead yet
