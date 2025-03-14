@@ -5,8 +5,8 @@
 
 {recreate}addi $t0,$s1,4 # initialise pointer
 {recreate}label{labelsm1}: # put a value on heap
-{recreate}slt $t3,$s0,$t0 # check if base is not reacged
-{recreate}beq $t3,$zero,label{labels} # if reached, stop
+{recreate}sgt $t3,$t0,$s0 # check if base is crossed, which happens when $t0 > $s0
+{recreate}bne $t3,$zero,label{labels} # if crossed, stop
 {recreate}lw $t1,0($t0) # get value from stack
 {recreate}sw $t1,0($s5) # put value on heap
 {recreate}addi $t0,$t0,4 # move stack pointer
@@ -18,7 +18,8 @@
 {recreate}li $t6,0x1FFFFFFF
 {recreate}and $t1,$t1,$t6
 {recreate}or $t1,$t1,$t5 # address corresponding to self
-{recreate}sw $s0,4($t1) # store fake base
+{recreate}addi $s4,$s5,-4
+{recreate}sw $s4,4($t1) # store fake base
 
 lw $t0,0($s0) # caller's base
 
