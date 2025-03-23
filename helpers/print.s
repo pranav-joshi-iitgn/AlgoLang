@@ -1,6 +1,6 @@
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
 addi $t4,$zero,4
@@ -58,6 +58,6 @@ syscall
 label{labels}:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
-addi $a0, $zero, 10
-addi $v0, $zero, 11 
+addi $a0,$zero,10
+addi $v0,$zero,11 
 syscall
