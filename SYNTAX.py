@@ -1713,7 +1713,7 @@ class EnclosedValues(Node):
                     "# get the elements of list, from left to right",
                     L[1].MIPS(wrap=False),
                     "",
-                    f"addi $s5, {4*n} # make space for {n+1} elements on heap",
+                    f"addi $s5,$s5,{4*n} # make space for {n+1} elements on heap",
                     "\n".join(["\n".join([
                         f"# store element at index {n-1-i}",
                         f"lw $t1,{4*i}($s1)",
