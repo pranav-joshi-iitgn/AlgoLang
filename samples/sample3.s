@@ -37,8 +37,8 @@ li $t2,0x80000000
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label6 # skip function
-label5:
+j label8 # skip function
+label7:
 
 # L is -16($s0)
 
@@ -250,13 +250,39 @@ addi $s1,$s1,-4
 lw $t1,-28($t0)
 sw $t1,0($s1)
 # return
-lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
-addi $t9,$zero,1
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
+
+# duplicate current stack frame on heap
+# ignore the return value at top of stack
+
+addi $t0,$s1,4 # initialise pointer
+label5: # put a value on heap
+sgt $t3,$t0,$s0 # check if base is crossed, which happens when $t0 > $s0
+bne $t3,$zero,label6 # if crossed, stop
+lw $t1,0($t0) # get value from stack
+sw $t1,0($s5) # put value on heap
+addi $t0,$t0,4 # move stack pointer
+addi $s5,$s5,4 # move heap pointer
+j label5 # repeat until all values are copied
+label6:# finished putting value
+lw $t1,-8($s0) # get self
+li $t5,0x7F000000
+li $t6,0x1FFFFFFF
+and $t1,$t1,$t6
+or $t1,$t1,$t5 # address corresponding to self
+addi $s4,$s5,-4
+sw $s4,4($t1) # store fake base
+
+lw $t0,0($s0) # caller's base
+
+lw $t1,0($s1) # return value
+sw $t1,0($s0) # store return value at base
+addi $t9,$zero,1 
+
+add $s1,$s0,$zero # restore stack pointer
+add $s0,$zero,$t0 # restore base pointer
+jr $ra # return
+# End of return
+
 
 
 
@@ -266,7 +292,7 @@ addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label6: # end of function
+label8: # end of function
 
 # Add this to parent pointer tree
 lw $t2,-8($s0) # parent
@@ -275,6 +301,7 @@ li $t6,0x1FFFFFFF
 and $t1,$t1,$t6
 or $t1,$t1,$t5
 sw $t2,0($t1) # child -> parent
+sw $zero,4($t1) # child has null as its copy, since it's not dead yet
 
 
 lw $t1,0($s1) # get value
@@ -373,7 +400,7 @@ addi $t0,$s0,-28 # load variable address
 sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
-label7_start: # while 
+label9_start: # while 
 
 # getting i
 add $t0,$s0,$zero
@@ -396,7 +423,7 @@ addi $s1,$s1,4
 slt $t1,$zero,$t9
 slt $t9,$t9,$zero
 or $t9,$t9,$t1
-beq $t9,$zero,label7_end
+beq $t9,$zero,label9_end
 
 # getting f
 add $t0,$s0,$zero
@@ -407,9 +434,9 @@ sw $t1,0($s1)
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label8
+beq $t1,$t2,label10
 j error # if wrong type
-label8:# type check over 
+label10:# type check over 
 
 lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
@@ -430,10 +457,11 @@ sw $t0,0($s1)
 addi $s1,$s1,-4
 sw $t1,0($s1)
 
-# third is the value of the parent, available at -8($t0)
+# third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-lw $t2,-8($t0)
-sw $t2,0($s1)
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
 
 # All other arguments
 # getting F
@@ -487,48 +515,48 @@ lw $t1,0($s1)
 # if t1 is a list or t2 is a list, then jump
 addi $t4,$zero,3
 srl $t3,$t2,29
-beq $t3,$t4,label11
+beq $t3,$t4,label13
 srl $t3,$t1,29
-beq $t3,$t4,label11
+beq $t3,$t4,label13
 
 # assume both types are int
 add $t7,$zero,$zero # assume t1 is not a float
 addi $t4,$t4,7
 srl $t3,$t1,29
-beq $t3,$t4,label9
-beq $t3,$zero,label9
+beq $t3,$t4,label11
+beq $t3,$zero,label11
 addi $t7,$zero,1 # we know now that t1 is a float
 
-label9: # t1 is int
+label11: # t1 is int
 srl $t3,$t2,29
-beq $t3,$t4,label10
-beq $t3,$zero,label10
+beq $t3,$t4,label12
+beq $t3,$zero,label12
 # t2 is a float now
 mtc1 $t1,$f1
 mtc1 $t2,$f2
-bne $t7,$zero,label_float10 # if t1 was a float too, jump to adition
+bne $t7,$zero,label_float12 # if t1 was a float too, jump to adition
 cvt.s.w $f1,$f1 # if not, convert t1 to float
-j label_float10 # j to float addition
+j label_float12 # j to float addition
 
-label10: # t2 is int
-bne $t7,$zero,label_float_conv10 # if t1 was a float, jump to conversion
+label12: # t2 is int
+bne $t7,$zero,label_float_conv12 # if t1 was a float, jump to conversion
 
-label_int10: # int addition
+label_int12: # int addition
 add $t1,$t1,$t2
-j label12 # finish
+j label14 # finish
 
-label_float_conv10: # conversion of t2 to float
+label_float_conv12: # conversion of t2 to float
 mtc1 $t1,$f1
 mtc1 $t2,$f2
 cvt.s.w $f2,$f2
 
-label_float10: # float addition
+label_float12: # float addition
 add.s $f1,$f1,$f2
 mfc1 $t1,$f1
-j label12 #finish
+j label14 #finish
 
 
-label11: # list
+label13: # list
 # concatenate lists
 lw $t3,0($t1) # 4*n1
 lw $t4,0($t2) # 4*n2
@@ -539,28 +567,28 @@ addi $s5,$s5,4 # s5 += 4
 sw $t5,0($t0) # store size first
 add $t6,$t0,$zero
 # Add stuff from first list to new allocated space
-label_t1_12:
+label_t1_14:
 slt $t7,$zero,$t3 # t3 > 0
-beq $t7,$zero,label_t2_12 # done adding
+beq $t7,$zero,label_t2_14 # done adding
 addi $t6,$t6,4
 addi $t1,$t1,4
 lw $t7,0($t1)
 sw $t7,0($t6)
 addi $t3,$t3,-4
-j label_t1_12
-label_t2_12: # add struff from second list
+j label_t1_14
+label_t2_14: # add struff from second list
 slt $t7,$zero,$t4 # t3 > 0
-beq $t7,$zero,label_t2_end_12 # done adding
+beq $t7,$zero,label_t2_end_14 # done adding
 addi $t6,$t6,4
 addi $t2,$t2,4
 lw $t7,0($t2)
 sw $t7,0($t6)
 addi $t4,$t4,-4
-j label_t2_12
-label_t2_end_12: # end adding from 2nd list
+j label_t2_14
+label_t2_end_14: # end adding from 2nd list
 add $t1,$t0,$zero
 
-label12: # finish
+label14: # finish
 
 sw $t1,0($s1)
 
@@ -573,8 +601,8 @@ addi $s1,$s1,4
 
 
 
-j label7_start
-label7_end: # end while
+j label9_start
+label9_end: # end while
 
 # Getting index
 # int 0
@@ -594,38 +622,62 @@ sw $t1,0($s1) # replace index on stack with valu
 
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label15 # 000 -> int
-beq $t1,$t3,label15 # 111 -> int
+addi $t4,$zero,4
+beq $t1,$zero,label17 # 000 -> int
+beq $t1,$t3,label17 # 111 -> int
+beq $t1,$t4,label_alg17 # 100 -> alg .. printed as int
 addi $t3,$zero,3
-bne $t1,$t3,label14 # 011 is for str
+bne $t1,$t3,label16 # 011 is for str
 
 # print a string
 lw $t1,0($t0) # 4n
 addi $v0,$zero,11 # for printing characters
-label13: # print character routine
+label15: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label16 # if t1 <= 0, finish
+beq $t3,$zero,label18 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label13 # continue printing characters
+j label15 # continue printing characters
 
-label14:#print float
+label16:#print float
 addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
-j label16
+j label18
 
-label15:#print int
+label_alg17:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label18
+
+
+label17:#print int
 addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
 
-label16:# end print
+label18:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10
@@ -651,38 +703,62 @@ sw $t1,0($s1) # replace index on stack with valu
 
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label19 # 000 -> int
-beq $t1,$t3,label19 # 111 -> int
+addi $t4,$zero,4
+beq $t1,$zero,label21 # 000 -> int
+beq $t1,$t3,label21 # 111 -> int
+beq $t1,$t4,label_alg21 # 100 -> alg .. printed as int
 addi $t3,$zero,3
-bne $t1,$t3,label18 # 011 is for str
+bne $t1,$t3,label20 # 011 is for str
 
 # print a string
 lw $t1,0($t0) # 4n
 addi $v0,$zero,11 # for printing characters
-label17: # print character routine
+label19: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label20 # if t1 <= 0, finish
+beq $t3,$zero,label22 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label17 # continue printing characters
+j label19 # continue printing characters
 
-label18:#print float
+label20:#print float
 addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
-j label20
+j label22
 
-label19:#print int
+label_alg21:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label22
+
+
+label21:#print int
 addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
 
-label20:# end print
+label22:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10

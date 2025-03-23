@@ -11,12 +11,20 @@ add $t1,$ra,$zero
 jr $ra
 
 main:
+li $sp,0x60000000
 addi $s0,$sp,0
 addi $s5,$sp,4
+addi $s1,$s0,-12
 
+jal pathfinder
+addi $t1,$t1,16
+li $t2,0x80000000
+or $t1,$t1,$t2
+sw $t1,-8($s0)
+
+thestart:
 addi $t8,$zero,1
 addi $t9,$zero,1
-addi $s1,$s0,0
 
 # int 2
 addi $s1,$s1,-4
@@ -48,11 +56,13 @@ add $t1,$t4,$zero
 sw $t1,0($s1)
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
+addi $t4,$zero,4
 beq $t1,$zero,label4 # 000 -> int
 beq $t1,$t3,label4 # 111 -> int
+beq $t1,$t4,label_alg4 # 100 -> alg .. printed as int
 addi $t3,$zero,3
 bne $t1,$t3,label3 # 011 is for str
 
@@ -73,6 +83,28 @@ addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
 j label5
+
+label_alg4:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label5
+
 
 label4:#print int
 addi $v0,$zero,1
@@ -97,10 +129,21 @@ theend:
 # Exit via syscall 10
 addi $v0,$zero,10
 syscall #10
-error:
-addi $a0, $zero, -1
-addi $v0, $zero, 1
+error:#Print ERROR
+addi $v0,$zero,11
+addi $a0,$zero,69 #E
 syscall
+addi $a0,$zero,82 #R
+syscall
+addi $a0,$zero,82 #R
+syscall
+addi $a0,$zero,79 #O
+syscall
+addi $a0,$zero,82 #R
+syscall
+addi $a0,$zero,10 # newline
+syscall
+
 # Exit via syscall 10
 addi $v0,$zero,10
 syscall #10

@@ -1,3 +1,4 @@
+# Do not compile
 dict x;
 x["a"] = 1;
 x["b"] = 2;

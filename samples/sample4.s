@@ -37,8 +37,8 @@ li $t2,0x80000000
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label15 # skip function
-label14:
+j label17 # skip function
+label16:
 
 # N is -16($s0)
 
@@ -404,13 +404,39 @@ addi $s1,$s1,-4
 lw $t1,-28($t0)
 sw $t1,0($s1)
 # return
-lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
-addi $t9,$zero,1
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
+
+# duplicate current stack frame on heap
+# ignore the return value at top of stack
+
+addi $t0,$s1,4 # initialise pointer
+label14: # put a value on heap
+sgt $t3,$t0,$s0 # check if base is crossed, which happens when $t0 > $s0
+bne $t3,$zero,label15 # if crossed, stop
+lw $t1,0($t0) # get value from stack
+sw $t1,0($s5) # put value on heap
+addi $t0,$t0,4 # move stack pointer
+addi $s5,$s5,4 # move heap pointer
+j label14 # repeat until all values are copied
+label15:# finished putting value
+lw $t1,-8($s0) # get self
+li $t5,0x7F000000
+li $t6,0x1FFFFFFF
+and $t1,$t1,$t6
+or $t1,$t1,$t5 # address corresponding to self
+addi $s4,$s5,-4
+sw $s4,4($t1) # store fake base
+
+lw $t0,0($s0) # caller's base
+
+lw $t1,0($s1) # return value
+sw $t1,0($s0) # store return value at base
+addi $t9,$zero,1 
+
+add $s1,$s0,$zero # restore stack pointer
+add $s0,$zero,$t0 # restore base pointer
+jr $ra # return
+# End of return
+
 
 
 
@@ -420,7 +446,7 @@ addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label15: # end of function
+label17: # end of function
 
 # Add this to parent pointer tree
 lw $t2,-8($s0) # parent
@@ -429,6 +455,7 @@ li $t6,0x1FFFFFFF
 and $t1,$t1,$t6
 or $t1,$t1,$t5
 sw $t2,0($t1) # child -> parent
+sw $zero,4($t1) # child has null as its copy, since it's not dead yet
 
 
 lw $t1,0($s1) # get value
@@ -445,9 +472,9 @@ sw $t1,0($s1)
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label16
+beq $t1,$t2,label18
 j error # if wrong type
-label16:# type check over 
+label18:# type check over 
 
 lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
@@ -468,10 +495,11 @@ sw $t0,0($s1)
 addi $s1,$s1,-4
 sw $t1,0($s1)
 
-# third is the value of the parent, available at -8($t0)
+# third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-lw $t2,-8($t0)
-sw $t2,0($s1)
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
 
 # All other arguments
 # int 4
@@ -501,38 +529,62 @@ sw $t1,0($s1)
 
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label19 # 000 -> int
-beq $t1,$t3,label19 # 111 -> int
+addi $t4,$zero,4
+beq $t1,$zero,label21 # 000 -> int
+beq $t1,$t3,label21 # 111 -> int
+beq $t1,$t4,label_alg21 # 100 -> alg .. printed as int
 addi $t3,$zero,3
-bne $t1,$t3,label18 # 011 is for str
+bne $t1,$t3,label20 # 011 is for str
 
 # print a string
 lw $t1,0($t0) # 4n
 addi $v0,$zero,11 # for printing characters
-label17: # print character routine
+label19: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label20 # if t1 <= 0, finish
+beq $t3,$zero,label22 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label17 # continue printing characters
+j label19 # continue printing characters
 
-label18:#print float
+label20:#print float
 addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
-j label20
+j label22
 
-label19:#print int
+label_alg21:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label22
+
+
+label21:#print int
 addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
 
-label20:# end print
+label22:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10

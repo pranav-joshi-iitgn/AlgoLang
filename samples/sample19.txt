@@ -4,5 +4,8 @@ let f = alg(x){
     let g = alg(){print x;};
     return g;
 };
-let G = f(1);
-run G;
+let G1= f(1);
+run G1;
+let G2= f(2);
+run G2;
+run G1;

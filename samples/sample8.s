@@ -152,11 +152,13 @@ label5: # finish
 sw $t1,0($s1)
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
+addi $t4,$zero,4
 beq $t1,$zero,label8 # 000 -> int
 beq $t1,$t3,label8 # 111 -> int
+beq $t1,$t4,label_alg8 # 100 -> alg .. printed as int
 addi $t3,$zero,3
 bne $t1,$t3,label7 # 011 is for str
 
@@ -177,6 +179,28 @@ addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
 j label9
+
+label_alg8:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label9
+
 
 label8:#print int
 addi $v0,$zero,1
@@ -206,11 +230,13 @@ lw $t1,-16($t0)
 sw $t1,0($s1)
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
+addi $t4,$zero,4
 beq $t1,$zero,label13 # 000 -> int
 beq $t1,$t3,label13 # 111 -> int
+beq $t1,$t4,label_alg13 # 100 -> alg .. printed as int
 addi $t3,$zero,3
 bne $t1,$t3,label12 # 011 is for str
 
@@ -231,6 +257,28 @@ addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
 j label14
+
+label_alg13:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label14
+
 
 label13:#print int
 addi $v0,$zero,1
@@ -521,11 +569,13 @@ lw $t1,-20($t0)
 sw $t1,0($s1)
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
+addi $t4,$zero,4
 beq $t1,$zero,label29 # 000 -> int
 beq $t1,$t3,label29 # 111 -> int
+beq $t1,$t4,label_alg29 # 100 -> alg .. printed as int
 addi $t3,$zero,3
 bne $t1,$t3,label28 # 011 is for str
 
@@ -546,6 +596,28 @@ addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
 j label30
+
+label_alg29:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label30
+
 
 label29:#print int
 addi $v0,$zero,1

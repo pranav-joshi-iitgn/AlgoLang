@@ -14,7 +14,7 @@ main:
 li $sp,0x60000000
 addi $s0,$sp,0
 addi $s5,$sp,4
-addi $s1,$s0,-28
+addi $s1,$s0,-32
 
 jal pathfinder
 addi $t1,$t1,16
@@ -61,8 +61,8 @@ li $t2,0x80000000
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label9 # skip function
-label8:
+j label11 # skip function
+label10:
 
 # x is -16($s0)
 
@@ -92,54 +92,36 @@ addi $s1,$s0,-12
 
 # getting x
 add $t0,$s0,$zero
+add $t4,$zero,$t0 # make a copy
+lw $t0,-12($t0) # fake parent stack
+bne $t0,$zero,label1 # even the fake parent is dead .. 1 
 li $t5,0x7F000000
 li $t6,0x1FFFFFFF
-lw $t1,-8($t0) # self
+lw $t1,-8($t4) # self
 and $t1,$t1,$t6
 or $t1,$t1,$t5
 lw $t2,0($t1) # parent
-lw $t0,-4($t0)
+lw $t0,-4($t4)
 lw $t3,-8($t0) # self_new
 beq $t3,$t2,label1
-#Print parent dead
-addi $v0,$zero,11
-addi $a0,$zero,112 #p
-syscall
-addi $a0,$zero,97 #a
-syscall
-addi $a0,$zero,114 #r
-syscall
-addi $a0,$zero,101 #e
-syscall
-addi $a0,$zero,110 #n
-syscall
-addi $a0,$zero,116 #t
-syscall
-addi $a0,$zero,32 # 
-syscall
-addi $a0,$zero,100 #d
-syscall
-addi $a0,$zero,101 #e
-syscall
-addi $a0,$zero,97 #a
-syscall
-addi $a0,$zero,100 #d
-syscall
-addi $a0,$zero,10 # newline
-syscall
-
-j error
-label1:# creator is still alive
+and $t2,$t2,$t6
+or $t2,$t2,$t5
+lw $t0,4($t2) # depend on fake parent
+beq $t0,$zero,error # even the fake parent is dead ... 2
+sw $t0,-12($t4) # update the fake parent
+label1:# creator alive checking over
 addi $s1,$s1,-4
 lw $t1,-16($t0)
 sw $t1,0($s1)
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
+addi $t4,$zero,4
 beq $t1,$zero,label4 # 000 -> int
 beq $t1,$t3,label4 # 111 -> int
+beq $t1,$t4,label_alg4 # 100 -> alg .. printed as int
 addi $t3,$zero,3
 bne $t1,$t3,label3 # 011 is for str
 
@@ -160,6 +142,28 @@ addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
 j label5
+
+label_alg4:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label5
+
 
 label4:#print int
 addi $v0,$zero,1
@@ -191,6 +195,7 @@ li $t6,0x1FFFFFFF
 and $t1,$t1,$t6
 or $t1,$t1,$t5
 sw $t2,0($t1) # child -> parent
+sw $zero,4($t1) # child has null as its copy, since it's not dead yet
 
 
 lw $t1,0($s1) # get value
@@ -204,13 +209,39 @@ addi $s1,$s1,-4
 lw $t1,-20($t0)
 sw $t1,0($s1)
 # return
-lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
-addi $t9,$zero,1
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
+
+# duplicate current stack frame on heap
+# ignore the return value at top of stack
+
+addi $t0,$s1,4 # initialise pointer
+label8: # put a value on heap
+sgt $t3,$t0,$s0 # check if base is crossed, which happens when $t0 > $s0
+bne $t3,$zero,label9 # if crossed, stop
+lw $t1,0($t0) # get value from stack
+sw $t1,0($s5) # put value on heap
+addi $t0,$t0,4 # move stack pointer
+addi $s5,$s5,4 # move heap pointer
+j label8 # repeat until all values are copied
+label9:# finished putting value
+lw $t1,-8($s0) # get self
+li $t5,0x7F000000
+li $t6,0x1FFFFFFF
+and $t1,$t1,$t6
+or $t1,$t1,$t5 # address corresponding to self
+addi $s4,$s5,-4
+sw $s4,4($t1) # store fake base
+
+lw $t0,0($s0) # caller's base
+
+lw $t1,0($s1) # return value
+sw $t1,0($s0) # store return value at base
+addi $t9,$zero,1 
+
+add $s1,$s0,$zero # restore stack pointer
+add $s0,$zero,$t0 # restore base pointer
+jr $ra # return
+# End of return
+
 
 
 
@@ -220,7 +251,7 @@ addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label9: # end of function
+label11: # end of function
 
 # Add this to parent pointer tree
 lw $t2,-8($s0) # parent
@@ -229,6 +260,7 @@ li $t6,0x1FFFFFFF
 and $t1,$t1,$t6
 or $t1,$t1,$t5
 sw $t2,0($t1) # child -> parent
+sw $zero,4($t1) # child has null as its copy, since it's not dead yet
 
 
 lw $t1,0($s1) # get value
@@ -236,7 +268,7 @@ addi $t0,$s0,-24 # load variable address
 sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
-# Definition : G is -28($s0)
+# Definition : G1 is -28($s0)
 
 # getting f
 add $t0,$s0,$zero
@@ -247,9 +279,9 @@ sw $t1,0($s1)
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label10
+beq $t1,$t2,label12
 j error # if wrong type
-label10:# type check over 
+label12:# type check over 
 
 lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
@@ -270,10 +302,11 @@ sw $t0,0($s1)
 addi $s1,$s1,-4
 sw $t1,0($s1)
 
-# third is the value of the parent, available at -8($t0)
+# third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-lw $t2,-8($t0)
-sw $t2,0($s1)
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
 
 # All other arguments
 # int 1
@@ -307,7 +340,7 @@ addi $t0,$s0,-28 # load variable address
 sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
-# getting G
+# getting G1
 add $t0,$s0,$zero
 addi $s1,$s1,-4
 lw $t1,-28($t0)
@@ -316,9 +349,9 @@ sw $t1,0($s1)
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label11
+beq $t1,$t2,label13
 j error # if wrong type
-label11:# type check over
+label13:# type check over
  lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
 and $t1, $t1, $t2
@@ -338,10 +371,193 @@ sw $t0,0($s1)
 addi $s1,$s1,-4
 sw $t1,0($s1)
 
-# third is the value of the parent, available at -8($t0)
+# third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-lw $t2,-8($t0)
-sw $t2,0($s1)
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
+
+# All other arguments
+# No arguments
+
+# Making a stack frame
+addi $s1,$s1,12
+lw $t2,4($s1)
+lw $t1,0($s1)
+sw $t1,4($s1)
+sw $s0,0($s1)
+add $s0,$s1,$zero
+addi $s1,$s1,-12
+jal pathfinder
+addi $ra,$t1,8
+jr $t2
+addi $s1,$s1,8
+lw $ra,-4($s1)
+
+
+# Definition : G2 is -32($s0)
+
+# getting f
+add $t0,$s0,$zero
+addi $s1,$s1,-4
+lw $t1,-24($t0)
+sw $t1,0($s1) 
+# assert type is alg
+lw $t1,0($s1)
+srl $t1,$t1,29
+addi $t2,$zero,4
+beq $t1,$t2,label14
+j error # if wrong type
+label14:# type check over 
+
+lw $t1, 0($s1)
+li $t2,0x1FFFFFFF
+and $t3, $t1, $t2
+sw $t3, 0($s1)
+
+# function called
+sw $ra,-4($s1)
+addi $s1,$s1,-4
+
+# Getting Arguments
+
+# first argument is the creator base, currently available in $t0
+addi $s1,$s1,-4
+sw $t0,0($s1)
+
+# second is the value of this function, currently available in $t1
+addi $s1,$s1,-4
+sw $t1,0($s1)
+
+# third is the stack base of fake parent, initially 0
+addi $s1,$s1,-4
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
+
+# All other arguments
+# int 2
+addi $s1,$s1,-4
+li $t1,2
+sw $t1,0($s1)
+
+# Making a stack frame
+addi $s1,$s1,16
+lw $t2,4($s1)
+lw $t1,0($s1)
+sw $t1,4($s1)
+sw $s0,0($s1)
+add $s0,$s1,$zero
+addi $s1,$s1,-16
+
+# jumping to the function
+jal pathfinder
+addi $ra,$t1,8 # $ra points to the next to next instruction
+jr $t2
+
+# getting the return value
+lw $t1,0($s1)
+addi $s1,$s1,4
+lw $ra,0($s1)
+sw $t1,0($s1)
+
+
+lw $t1,0($s1) # get value
+addi $t0,$s0,-32 # load variable address
+sw $t1,0($t0) # update the value at variable address
+addi $s1,$s1,4 # remove the value on stack
+
+# getting G2
+add $t0,$s0,$zero
+addi $s1,$s1,-4
+lw $t1,-32($t0)
+sw $t1,0($s1)
+ # assert type is alg
+lw $t1,0($s1)
+srl $t1,$t1,29
+addi $t2,$zero,4
+beq $t1,$t2,label15
+j error # if wrong type
+label15:# type check over
+ lw $t1, 0($s1)
+li $t2,0x1FFFFFFF
+and $t1, $t1, $t2
+sw $t1, 0($s1)
+
+# function call
+sw $ra,-4($s1)
+addi $s1,$s1,-4
+
+# Getting Arguments
+
+# first argument is the creator base, currently available in $t0
+addi $s1,$s1,-4
+sw $t0,0($s1)
+
+# second is the value of this function, currently available in $t1
+addi $s1,$s1,-4
+sw $t1,0($s1)
+
+# third is the stack base of fake parent, initially 0
+addi $s1,$s1,-4
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
+
+# All other arguments
+# No arguments
+
+# Making a stack frame
+addi $s1,$s1,12
+lw $t2,4($s1)
+lw $t1,0($s1)
+sw $t1,4($s1)
+sw $s0,0($s1)
+add $s0,$s1,$zero
+addi $s1,$s1,-12
+jal pathfinder
+addi $ra,$t1,8
+jr $t2
+addi $s1,$s1,8
+lw $ra,-4($s1)
+
+
+# getting G1
+add $t0,$s0,$zero
+addi $s1,$s1,-4
+lw $t1,-28($t0)
+sw $t1,0($s1)
+ # assert type is alg
+lw $t1,0($s1)
+srl $t1,$t1,29
+addi $t2,$zero,4
+beq $t1,$t2,label16
+j error # if wrong type
+label16:# type check over
+ lw $t1, 0($s1)
+li $t2,0x1FFFFFFF
+and $t1, $t1, $t2
+sw $t1, 0($s1)
+
+# function call
+sw $ra,-4($s1)
+addi $s1,$s1,-4
+
+# Getting Arguments
+
+# first argument is the creator base, currently available in $t0
+addi $s1,$s1,-4
+sw $t0,0($s1)
+
+# second is the value of this function, currently available in $t1
+addi $s1,$s1,-4
+sw $t1,0($s1)
+
+# third is the stack base of fake parent, initially 0
+addi $s1,$s1,-4
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
 
 # All other arguments
 # No arguments

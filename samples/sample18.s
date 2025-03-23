@@ -21,7 +21,10 @@ addi $t1,$t1,16
 li $t2,0x80000000
 or $t1,$t1,$t2
 sw $t1,-8($s0)
+
 thestart:
+addi $t8,$zero,1
+addi $t9,$zero,1
 
 # Definition : f is -16($s0)
 
@@ -34,8 +37,8 @@ li $t2,0x80000000
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label13 # skip function
-label12:
+j label16 # skip function
+label15:
 
 # x is -16($s0)
 
@@ -65,25 +68,51 @@ sw $t1,0($s1)
 
 lw $t9,0($s1) #get result of condition
 addi $s1,$s1,4 # delete a value
-beq $t9,$zero,label1 # if
+beq $t9,$zero,label3 # if
 
 # int 1
 addi $s1,$s1,-4
 li $t1,1
 sw $t1,0($s1)
 # return
-lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
+
+# duplicate current stack frame on heap
+# ignore the return value at top of stack
+
+addi $t0,$s1,4 # initialise pointer
+label1: # put a value on heap
+sgt $t3,$t0,$s0 # check if base is crossed, which happens when $t0 > $s0
+bne $t3,$zero,label2 # if crossed, stop
+lw $t1,0($t0) # get value from stack
+sw $t1,0($s5) # put value on heap
+addi $t0,$t0,4 # move stack pointer
+addi $s5,$s5,4 # move heap pointer
+j label1 # repeat until all values are copied
+label2:# finished putting value
+lw $t1,-8($s0) # get self
+li $t5,0x7F000000
+li $t6,0x1FFFFFFF
+and $t1,$t1,$t6
+or $t1,$t1,$t5 # address corresponding to self
+addi $s4,$s5,-4
+sw $s4,4($t1) # store fake base
+
+lw $t0,0($s0) # caller's base
+
+lw $t1,0($s1) # return value
+sw $t1,0($s0) # store return value at base
+addi $t9,$zero,1 
+
+add $s1,$s0,$zero # restore stack pointer
+add $s0,$zero,$t0 # restore base pointer
+jr $ra # return
+# End of return
+
+
+
+
 addi $t9,$zero,1
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
-
-
-
-addi $t9,$zero,1
-label1: # end if
+label3: # end if
 
 # getting x
 add $t0,$s0,$zero
@@ -91,56 +120,18 @@ addi $s1,$s1,-4
 lw $t1,-16($t0)
 sw $t1,0($s1)
 
-# getting f
+# getting self
 add $t0,$s0,$zero
-li $t5,0x7F000000
-li $t6,0x1FFFFFFF
-lw $t1,-8($t0) # self
-and $t1,$t1,$t6
-or $t1,$t1,$t5
-lw $t2,0($t1) # parent
-lw $t0,-4($t0)
-lw $t3,-8($t0) # self_new
-beq $t3,$t2,label2
-#Print parent dead
-addi $v0,$zero,11
-addi $a0,$zero,112 #p
-syscall
-addi $a0,$zero,97 #a
-syscall
-addi $a0,$zero,114 #r
-syscall
-addi $a0,$zero,101 #e
-syscall
-addi $a0,$zero,110 #n
-syscall
-addi $a0,$zero,116 #t
-syscall
-addi $a0,$zero,32 # 
-syscall
-addi $a0,$zero,100 #d
-syscall
-addi $a0,$zero,101 #e
-syscall
-addi $a0,$zero,97 #a
-syscall
-addi $a0,$zero,100 #d
-syscall
-addi $a0,$zero,10 # newline
-syscall
-
-j error
-label2:# creator is still alive
 addi $s1,$s1,-4
-lw $t1,-16($t0)
+lw $t1,-8($t0)
 sw $t1,0($s1) 
 # assert type is alg
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label7
+beq $t1,$t2,label8
 j error # if wrong type
-label7:# type check over 
+label8:# type check over 
 
 lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
@@ -161,10 +152,11 @@ sw $t0,0($s1)
 addi $s1,$s1,-4
 sw $t1,0($s1)
 
-# third is the value of the parent, available at -8($t0)
+# third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-lw $t2,-8($t0)
-sw $t2,0($s1)
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
 
 # All other arguments
 # getting x
@@ -192,39 +184,39 @@ lw $t1,0($s1)
 add $t7,$zero,$zero 
 addi $t4,$t4,7
 srl $t3,$t1,29
-beq $t3,$t4,label4
-beq $t3,$zero,label4
+beq $t3,$t4,label5
+beq $t3,$zero,label5
 addi $t7,$zero,1 # we know now that t1 is a float
-label4: # t1 is int
+label5: # t1 is int
 
 # Assume t2 is an int
 srl $t3,$t2,29
-beq $t3,$t4,label5
-beq $t3,$zero,label5
+beq $t3,$t4,label6
+beq $t3,$zero,label6
 # t2 is a float now
 mtc1 $t1,$f1
 mtc1 $t2,$f2
-bne $t7,$zero,label_float5 # if t1 was a float too, jump to adition
+bne $t7,$zero,label_float6 # if t1 was a float too, jump to adition
 cvt.s.w $f1,$f1 # if not, convert t1 to float
-j label_float5 # j to float subtraction
+j label_float6 # j to float subtraction
 
-label5: # t2 is int
-bne $t7,$zero,label_float_conv5 # if t1 was a float, jump to conversion
+label6: # t2 is int
+bne $t7,$zero,label_float_conv6 # if t1 was a float, jump to conversion
 
-label_int5: # int subtraction
+label_int6: # int subtraction
 sub $t1,$t1,$t2
-j label6 # finish
+j label7 # finish
 
-label_float_conv5: # conversion of t2 to float
+label_float_conv6: # conversion of t2 to float
 mtc1 $t1,$f1
 mtc1 $t2,$f2
 cvt.s.w $f2,$f2
 
-label_float5: # float subtraction
+label_float6: # float subtraction
 sub.s $f1,$f1,$f2
 mfc1 $t1,$f1
 
-label6: # finish
+label7: # finish
 sw $t1,0($s1)
 
 # Making a stack frame
@@ -262,50 +254,76 @@ lw $t1,0($s1)
 add $t7,$zero,$zero 
 addi $t4,$t4,7
 srl $t3,$t1,29
-beq $t3,$t4,label9
-beq $t3,$zero,label9
+beq $t3,$t4,label10
+beq $t3,$zero,label10
 addi $t7,$zero,1 # we know now that t1 is a float
-label9: # t1 is int
+label10: # t1 is int
 
 # Assume t2 is an int
 srl $t3,$t2,29
-beq $t3,$t4,label10
-beq $t3,$zero,label10
+beq $t3,$t4,label11
+beq $t3,$zero,label11
 # t2 is a float now
 mtc1 $t1,$f1
 mtc1 $t2,$f2
-bne $t7,$zero,label_float10 # if t1 was a float too, jump to adition
+bne $t7,$zero,label_float11 # if t1 was a float too, jump to adition
 cvt.s.w $f1,$f1 # if not, convert t1 to float
-j label_float10 # j to float operation
+j label_float11 # j to float operation
 
-label10: # t2 is int
-bne $t7,$zero,label_float_conv10 # if t1 was a float, jump to conversion
+label11: # t2 is int
+bne $t7,$zero,label_float_conv11 # if t1 was a float, jump to conversion
 
-label_int10: # int multiplication
+label_int11: # int multiplication
 mult $t1,$t2
 mflo $t1
 mfhi $t2
-j label11 # finish
+j label12 # finish
 
-label_float_conv10: # conversion of t2 to float
+label_float_conv11: # conversion of t2 to float
 mtc1 $t1,$f1
 mtc1 $t2,$f2
 cvt.s.w $f2,$f2
 
-label_float10: # float multiplication
+label_float11: # float multiplication
 mul.s $f1,$f1,$f2
 mfc1 $t1,$f1
 
-label11: # finish
+label12: # finish
 sw $t1,0($s1)
 # return
-lw $t0,0($s0)
-lw $t1,0($s1)
-sw $t1,0($s0)
-addi $t9,$zero,1
-add $s1,$s0,$zero
-add $s0,$zero,$t0
-jr $ra
+
+# duplicate current stack frame on heap
+# ignore the return value at top of stack
+
+addi $t0,$s1,4 # initialise pointer
+label13: # put a value on heap
+sgt $t3,$t0,$s0 # check if base is crossed, which happens when $t0 > $s0
+bne $t3,$zero,label14 # if crossed, stop
+lw $t1,0($t0) # get value from stack
+sw $t1,0($s5) # put value on heap
+addi $t0,$t0,4 # move stack pointer
+addi $s5,$s5,4 # move heap pointer
+j label13 # repeat until all values are copied
+label14:# finished putting value
+lw $t1,-8($s0) # get self
+li $t5,0x7F000000
+li $t6,0x1FFFFFFF
+and $t1,$t1,$t6
+or $t1,$t1,$t5 # address corresponding to self
+addi $s4,$s5,-4
+sw $s4,4($t1) # store fake base
+
+lw $t0,0($s0) # caller's base
+
+lw $t1,0($s1) # return value
+sw $t1,0($s0) # store return value at base
+addi $t9,$zero,1 
+
+add $s1,$s0,$zero # restore stack pointer
+add $s0,$zero,$t0 # restore base pointer
+jr $ra # return
+# End of return
+
 
 
 
@@ -315,7 +333,7 @@ addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label13: # end of function
+label16: # end of function
 
 # Add this to parent pointer tree
 lw $t2,-8($s0) # parent
@@ -324,6 +342,7 @@ li $t6,0x1FFFFFFF
 and $t1,$t1,$t6
 or $t1,$t1,$t5
 sw $t2,0($t1) # child -> parent
+sw $zero,4($t1) # child has null as its copy, since it's not dead yet
 
 
 lw $t1,0($s1) # get value
@@ -340,9 +359,9 @@ sw $t1,0($s1)
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label14
+beq $t1,$t2,label17
 j error # if wrong type
-label14:# type check over 
+label17:# type check over 
 
 lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
@@ -363,10 +382,11 @@ sw $t0,0($s1)
 addi $s1,$s1,-4
 sw $t1,0($s1)
 
-# third is the value of the parent, available at -8($t0)
+# third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-lw $t2,-8($t0)
-sw $t2,0($s1)
+# lw $t2,-8($t0)
+# sw $t2,0($s1)
+sw $zero,0($s1)
 
 # All other arguments
 # int 10
@@ -396,38 +416,62 @@ sw $t1,0($s1)
 
 
 # Print
-lw $t0, 0($s1)
+lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label17 # 000 -> int
-beq $t1,$t3,label17 # 111 -> int
+addi $t4,$zero,4
+beq $t1,$zero,label20 # 000 -> int
+beq $t1,$t3,label20 # 111 -> int
+beq $t1,$t4,label_alg20 # 100 -> alg .. printed as int
 addi $t3,$zero,3
-bne $t1,$t3,label16 # 011 is for str
+bne $t1,$t3,label19 # 011 is for str
 
 # print a string
 lw $t1,0($t0) # 4n
 addi $v0,$zero,11 # for printing characters
-label15: # print character routine
+label18: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label18 # if t1 <= 0, finish
+beq $t3,$zero,label21 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label15 # continue printing characters
+j label18 # continue printing characters
 
-label16:#print float
+label19:#print float
 addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
-j label18
+j label21
 
-label17:#print int
+label_alg20:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label21
+
+
+label20:#print int
 addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
 
-label18:# end print
+label21:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10

@@ -1,3 +1,4 @@
+# Do not compile
 let L = [];
 dict L;
 L["1"] = 2;

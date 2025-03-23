@@ -5,14 +5,16 @@ let f = alg(x){
 	return g;
 };
 let g = f(1);
-print g;
 let h = alg(a){
 	let k = alg(){
 		print a;
 	};
 	return k;
 };
-let k=h(g);
+let k=f(g);
+print f;
+print h;
 print k;
-let x = 2;
-let y = g();
+print g;
+# run k;
+# run g;

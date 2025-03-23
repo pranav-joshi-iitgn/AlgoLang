@@ -26,7 +26,19 @@ thestart:
 addi $t8,$zero,1
 addi $t9,$zero,1
 
-# Definition : f is -16($s0)
+# Definition : x is -16($s0)
+
+# int 2
+addi $s1,$s1,-4
+li $t1,2
+sw $t1,0($s1)
+
+lw $t1,0($s1) # get value
+addi $t0,$s0,-16 # load variable address
+sw $t1,0($t0) # update the value at variable address
+addi $s1,$s1,4 # remove the value on stack
+
+# Definition : a is -20($s0)
 
 # Algorithm
 add $t2,$ra,$zero # save current ra
@@ -37,20 +49,37 @@ li $t2,0x80000000
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label6 # skip function
-label5:
+j label7 # skip function
+label6:
 
-# x is -16($s0)
-# y is -20($s0)
+
 
 addi $t8,$zero,1
 addi $t9,$zero,1
-addi $s1,$s0,-20
+addi $s1,$s0,-12
 
-# getting y
+# getting x
 add $t0,$s0,$zero
+add $t4,$zero,$t0 # make a copy
+lw $t0,-12($t0) # fake parent stack
+bne $t0,$zero,label1 # even the fake parent is dead .. 1 
+li $t5,0x7F000000
+li $t6,0x1FFFFFFF
+lw $t1,-8($t4) # self
+and $t1,$t1,$t6
+or $t1,$t1,$t5
+lw $t2,0($t1) # parent
+lw $t0,-4($t4)
+lw $t3,-8($t0) # self_new
+beq $t3,$t2,label1
+and $t2,$t2,$t6
+or $t2,$t2,$t5
+lw $t0,4($t2) # depend on fake parent
+beq $t0,$zero,error # even the fake parent is dead ... 2
+sw $t0,-12($t4) # update the fake parent
+label1:# creator alive checking over
 addi $s1,$s1,-4
-lw $t1,-20($t0)
+lw $t1,-16($t0)
 sw $t1,0($s1)
 
 # Print
@@ -58,31 +87,31 @@ lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
 addi $t4,$zero,4
-beq $t1,$zero,label3 # 000 -> int
-beq $t1,$t3,label3 # 111 -> int
-beq $t1,$t4,label_alg3 # 100 -> alg .. printed as int
+beq $t1,$zero,label4 # 000 -> int
+beq $t1,$t3,label4 # 111 -> int
+beq $t1,$t4,label_alg4 # 100 -> alg .. printed as int
 addi $t3,$zero,3
-bne $t1,$t3,label2 # 011 is for str
+bne $t1,$t3,label3 # 011 is for str
 
 # print a string
 lw $t1,0($t0) # 4n
 addi $v0,$zero,11 # for printing characters
-label1: # print character routine
+label2: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label4 # if t1 <= 0, finish
+beq $t3,$zero,label5 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label1 # continue printing characters
+j label2 # continue printing characters
 
-label2:#print float
+label3:#print float
 addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
-j label4
+j label5
 
-label_alg3:#print alg
+label_alg4:#print alg
 addi $v0,$zero,11
 addi $a0,$zero,'a'
 syscall
@@ -101,15 +130,15 @@ syscall
 addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
-j label4
+j label5
 
 
-label3:#print int
+label4:#print int
 addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
 
-label4:# end print
+label5:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10
@@ -125,7 +154,7 @@ addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label6: # end of function
+label7: # end of function
 
 # Add this to parent pointer tree
 lw $t2,-8($s0) # parent
@@ -138,34 +167,22 @@ sw $zero,4($t1) # child has null as its copy, since it's not dead yet
 
 
 lw $t1,0($s1) # get value
-addi $t0,$s0,-16 # load variable address
-sw $t1,0($t0) # update the value at variable address
-addi $s1,$s1,4 # remove the value on stack
-
-# Definition : x is -20($s0)
-
-# int 1
-addi $s1,$s1,-4
-li $t1,1
-sw $t1,0($s1)
-
-lw $t1,0($s1) # get value
 addi $t0,$s0,-20 # load variable address
 sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
-# getting f
+# getting a
 add $t0,$s0,$zero
 addi $s1,$s1,-4
-lw $t1,-16($t0)
+lw $t1,-20($t0)
 sw $t1,0($s1)
  # assert type is alg
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label7
+beq $t1,$t2,label8
 j error # if wrong type
-label7:# type check over
+label8:# type check over
  lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
 and $t1, $t1, $t2
@@ -192,38 +209,106 @@ addi $s1,$s1,-4
 sw $zero,0($s1)
 
 # All other arguments
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-20($t0)
-sw $t1,0($s1)
-
-# putting "ab" on heap 
-add $t0,$s5,$zero
-addi $s5, $s5,12
-addi $t1,$zero,8 # add size at start
-sw $t1,0($t0)
-addi $t1,$zero,97 # a
-sw $t1, 4($t0)
-addi $t1,$zero,98 # b
-sw $t1, 8($t0)
-# add the pointer on stack
-addi $s1,$s1,-4
-sw $t0,0($s1)
+# No arguments
 
 # Making a stack frame
-addi $s1,$s1,20
+addi $s1,$s1,12
 lw $t2,4($s1)
 lw $t1,0($s1)
 sw $t1,4($s1)
 sw $s0,0($s1)
 add $s0,$s1,$zero
-addi $s1,$s1,-20
+addi $s1,$s1,-12
 jal pathfinder
 addi $ra,$t1,8
 jr $t2
 addi $s1,$s1,8
 lw $ra,-4($s1)
+
+
+# int 2
+addi $s1,$s1,-4
+li $t1,2
+sw $t1,0($s1)
+
+# <bound method SignedValue.op of SignedValue->- EnclosedValues>
+lw $t1,0($s1)
+srl $t2,$t1,29
+addi $t3,$zero,7
+beq $t2,$t3,label_int9
+beq $t2,$zero,label_int9
+mtc1 $t1,$f1
+mtc1 $zero,$f2
+sub.s $f1,$f2,$f1
+mfc1 $t1,$f1
+j label9
+label_int9: #int
+sub $t1,$zero,$t1
+label9: # finish
+sw $t1,0($s1)
+
+# Print
+lw $t0,0($s1)
+srl $t1,$t0,29
+addi $t3,$zero,7
+addi $t4,$zero,4
+beq $t1,$zero,label12 # 000 -> int
+beq $t1,$t3,label12 # 111 -> int
+beq $t1,$t4,label_alg12 # 100 -> alg .. printed as int
+addi $t3,$zero,3
+bne $t1,$t3,label11 # 011 is for str
+
+# print a string
+lw $t1,0($t0) # 4n
+addi $v0,$zero,11 # for printing characters
+label10: # print character routine
+slt $t3,$zero,$t1
+beq $t3,$zero,label13 # if t1 <= 0, finish
+addi $t0,$t0,4 # next character
+lw $a0,0($t0) #put char in buffer
+syscall # print char
+addi $t1,$t1,-4 # decr remaining bytes by 1
+j label10 # continue printing characters
+
+label11:#print float
+addi $v0,$zero,2
+mtc1 $t0,$f12
+syscall
+j label13
+
+label_alg12:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+j label13
+
+
+label12:#print int
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+
+label13:# end print
+addi $s1,$s1,4
+# print newline via syscall 11 to clean up
+addi $a0, $zero, 10
+addi $v0, $zero, 11 
+syscall
 
 
 
