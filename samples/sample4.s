@@ -475,15 +475,16 @@ addi $t2,$zero,4
 beq $t1,$t2,label18
 j error # if wrong type
 label18:# type check over 
-
 lw $t1, 0($s1)
-li $t2,0x1FFFFFFF
-and $t3, $t1, $t2
-sw $t3, 0($s1)
+
+#li $t2,0x1FFFFFFF
+#and $t3, $t1, $t2
+#sw $t3, 0($s1)
 
 # function called
-sw $ra,-4($s1)
+sw $ra,0($s1) #sw $ra,-4($s1)
 addi $s1,$s1,-4
+sw $s0,0($s1) #
 
 # Getting Arguments
 
@@ -497,8 +498,6 @@ sw $t1,0($s1)
 
 # third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-# lw $t2,-8($t0)
-# sw $t2,0($s1)
 sw $zero,0($s1)
 
 # All other arguments
@@ -509,10 +508,10 @@ sw $t1,0($s1)
 
 # Making a stack frame
 addi $s1,$s1,16
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
+lw $t1,-8($s1) #lw $t2,4($s1)
+li $t2,0x1FFFFFFF #lw $t1,0($s1)
+and $t2, $t1, $t2 #sw $t1,4($s1)
+#sw $s0,0($s1)
 add $s0,$s1,$zero
 addi $s1,$s1,-16
 
@@ -587,8 +586,8 @@ syscall
 label22:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
-addi $a0, $zero, 10
-addi $v0, $zero, 11 
+addi $a0,$zero,10
+addi $v0,$zero,11 
 syscall
 
 

@@ -150,8 +150,8 @@ syscall
 label9:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
-addi $a0, $zero, 10
-addi $v0, $zero, 11 
+addi $a0,$zero,10
+addi $v0,$zero,11 
 syscall
 
 

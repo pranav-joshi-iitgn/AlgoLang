@@ -28,9 +28,9 @@ addi $t9,$zero,1
 
 # Definition : L0 is -16($s0)
 
-# int 10
+# int 1
 addi $s1,$s1,-4
-li $t1,10
+li $t1,1
 sw $t1,0($s1)
 
 # list
@@ -56,9 +56,9 @@ lw $t1,-16($t0)
 sw $t1,0($s1)
 
 # get the elements of list, from left to right
-# float 1.2
+# int 1
 addi $s1,$s1,-4
-li $t1,1067030938
+li $t1,1
 sw $t1,0($s1)
 
 # int 1
@@ -81,7 +81,7 @@ sw $t1,-8($s5)
 # store element at index 0
 lw $t1,8($s1)
 sw $t1,-12($s5)
-addi $s1,8 # pop stack 2 times
+addi $s1,$s1,8 # pop stack 2 times
 addi $t0,$s5,-16 # old $s5 value
 sw $t0,0($s1) # store pointer on heap
 addi $t1,$zero,12
@@ -176,9 +176,9 @@ sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
 # Getting index
-# int 10
+# int 2
 addi $s1,$s1,-4
-li $t1,10
+li $t1,2
 sw $t1,0($s1)
 
 lw $t2,0($s1) # load index
@@ -251,8 +251,8 @@ syscall
 label8:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
-addi $a0, $zero, 10
-addi $v0, $zero, 11 
+addi $a0,$zero,10
+addi $v0,$zero,11 
 syscall
 
 

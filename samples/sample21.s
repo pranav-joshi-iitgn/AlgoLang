@@ -13,7 +13,7 @@ main:
 li $sp,0x60000000
 addi $s0,$sp,0
 addi $s5,$sp,4
-addi $s1,$s0,-20
+addi $s1,$s0,-16
 
 jal pathfinder
 addi $t1,$t1,16
@@ -37,84 +37,9 @@ sll $t2,$t8,31
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label6 # skip function
-label5:
+j label2 # skip function
+label1:
 
-# x is -16($s0)
-# y is -20($s0)
-
-addi $t8,$zero,1
-addi $t9,$zero,1
-addi $s1,$s0,-20
-
-# getting y
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-20($t0)
-sw $t1,0($s1)
-
-# Print
-lw $t0,0($s1)
-srl $t1,$t0,29
-addi $t3,$zero,7
-addi $t4,$zero,4
-beq $t1,$zero,label3 # 000 -> int
-beq $t1,$t3,label3 # 111 -> int
-beq $t1,$t4,label_alg3 # 100 -> alg .. printed as int
-addi $t3,$zero,3
-bne $t1,$t3,label2 # 011 is for str
-
-# print a string
-lw $t1,0($t0) # 4n
-addi $v0,$zero,11 # for printing characters
-label1: # print character routine
-slt $t3,$zero,$t1
-beq $t3,$zero,label4 # if t1 <= 0, finish
-addi $t0,$t0,4 # next character
-lw $a0,0($t0) #put char in buffer
-syscall # print char
-addi $t1,$t1,-4 # decr remaining bytes by 1
-j label1 # continue printing characters
-
-label2:#print float
-addi $v0,$zero,2
-mtc1 $t0,$f12
-syscall
-j label4
-
-label_alg3:#print alg
-addi $v0,$zero,11
-addi $a0,$zero,'a'
-syscall
-addi $a0,$zero,'l'
-syscall
-addi $a0,$zero,'g'
-syscall
-addi $a0,$zero,' '
-syscall
-addi $a0,$zero,'a'
-syscall
-addi $a0,$zero,'t'
-syscall
-addi $a0,$zero,' '
-syscall
-addi $v0,$zero,1
-add $a0,$t0,$zero
-syscall
-j label4
-
-
-label3:#print int
-addi $v0,$zero,1
-add $a0,$t0,$zero
-syscall
-
-label4:# end print
-addi $s1,$s1,4
-# print newline via syscall 11 to clean up
-addi $a0,$zero,10
-addi $v0,$zero,11 
-syscall
 
 
 
@@ -125,7 +50,7 @@ addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label6: # end of function
+label2: # end of function
 
 # Add this to parent pointer tree
 lw $t2,-8($s0) # parent
@@ -142,18 +67,6 @@ addi $t0,$s0,-16 # load variable address
 sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
-# Definition : x is -20($s0)
-
-# int 1
-addi $s1,$s1,-4
-li $t1,1
-sw $t1,0($s1)
-
-lw $t1,0($s1) # get value
-addi $t0,$s0,-20 # load variable address
-sw $t1,0($t0) # update the value at variable address
-addi $s1,$s1,4 # remove the value on stack
-
 # getting f
 add $t0,$s0,$zero
 addi $s1,$s1,-4
@@ -163,9 +76,9 @@ sw $t1,0($s1)
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label7
+beq $t1,$t2,label3
 j error # if wrong type
-label7:# type check over
+label3:# type check over
  lw $t1, 0($s1)
 li $t2,0x1FFFFFFF
 and $t1, $t1, $t2
@@ -192,33 +105,16 @@ addi $s1,$s1,-4
 sw $zero,0($s1)
 
 # All other arguments
-# getting x
-add $t0,$s0,$zero
-addi $s1,$s1,-4
-lw $t1,-20($t0)
-sw $t1,0($s1)
-
-# putting "ab" on heap 
-add $t0,$s5,$zero
-addi $s5, $s5,12
-addi $t1,$zero,8 # add size at start
-sw $t1,0($t0)
-addi $t1,$zero,97 # a
-sw $t1, 4($t0)
-addi $t1,$zero,98 # b
-sw $t1, 8($t0)
-# add the pointer on stack
-addi $s1,$s1,-4
-sw $t0,0($s1)
+# No arguments
 
 # Making a stack frame
-addi $s1,$s1,20
+addi $s1,$s1,12
 lw $t2,4($s1)
 lw $t1,0($s1)
 sw $t1,4($s1)
 sw $s0,0($s1)
 add $s0,$s1,$zero
-addi $s1,$s1,-20
+addi $s1,$s1,-12
 jal pathfinder
 addi $ra,$t1,8
 jr $t2

@@ -1,0 +1,174 @@
+0x00400000: j 0x0040000C # -> Code+0xC
+0x00400004: add $t1, $ra, $zero
+0x00400008: jr $ra
+0x0040000C: lui $at, 0x6000
+0x00400010: ori $sp, $at, 0x0
+0x00400014: addi $s0, $sp, 0
+0x00400018: addi $s5, $sp, 4
+0x0040001C: addi $s1, $s0, -20
+0x00400020: jal 0x00400004 # -> Code+0x4
+0x00400024: addi $t1, $t1, 16
+0x00400028: lui $at, 0x8000
+0x0040002C: ori $t2, $at, 0x0
+0x00400030: or $t1, $t1, $t2
+0x00400034: sw $t1, -8($s0)
+0x00400038: addi $t8, $zero, 1
+0x0040003C: addi $t9, $zero, 1
+0x00400040: add $t2, $ra, $zero
+0x00400044: jal 0x00400004 # -> Code+0x4
+0x00400048: add $ra, $t2, $zero
+0x0040004C: addi $t1, $t1, 28
+0x00400050: lui $at, 0x8000
+0x00400054: ori $t2, $at, 0x0
+0x00400058: or $t1, $t1, $t2
+0x0040005C: addi $s1, $s1, -4
+0x00400060: sw $t1, 0($s1)
+0x00400064: j 0x00400158 # -> Code+0x158
+0x00400068: addi $t8, $zero, 1
+0x0040006C: addi $t9, $zero, 1
+0x00400070: addi $s1, $s0, -20
+0x00400074: add $t0, $s0, $zero
+0x00400078: addi $s1, $s1, -4
+0x0040007C: lw $t1, -20($t0)
+0x00400080: sw $t1, 0($s1)
+0x00400084: lw $t0, 0($s1)
+0x00400088: srl $t1, $t0, 29
+0x0040008C: addi $t3, $zero, 7
+0x00400090: addi $t4, $zero, 4
+0x00400094: beq $t1, $zero, 0x00400128 # -> Code+0x128
+0x00400098: beq $t1, $t3, 0x00400128 # -> Code+0x128
+0x0040009C: beq $t1, $t4, 0x004000DC # -> Code+0xDC
+0x004000A0: addi $t3, $zero, 3
+0x004000A4: bne $t1, $t3, 0x004000CC # -> Code+0xCC
+0x004000A8: lw $t1, 0($t0)
+0x004000AC: addi $v0, $zero, 11
+0x004000B0: slt $t3, $zero, $t1
+0x004000B4: beq $t3, $zero, 0x00400134 # -> Code+0x134
+0x004000B8: addi $t0, $t0, 4
+0x004000BC: lw $a0, 0($t0)
+0x004000C0: syscall
+0x004000C4: addi $t1, $t1, -4
+0x004000C8: j 0x004000B0 # -> Code+0xB0
+0x004000CC: addi $v0, $zero, 2
+0x004000D0: mtc1 $t0, $f12
+0x004000D4: syscall
+0x004000D8: j 0x00400134 # -> Code+0x134
+0x004000DC: addi $v0, $zero, 11
+0x004000E0: addi $a0, $zero, 97
+0x004000E4: syscall
+0x004000E8: addi $a0, $zero, 108
+0x004000EC: syscall
+0x004000F0: addi $a0, $zero, 103
+0x004000F4: syscall
+0x004000F8: addi $a0, $zero, 32
+0x004000FC: syscall
+0x00400100: addi $a0, $zero, 97
+0x00400104: syscall
+0x00400108: addi $a0, $zero, 116
+0x0040010C: syscall
+0x00400110: addi $a0, $zero, 32
+0x00400114: syscall
+0x00400118: addi $v0, $zero, 1
+0x0040011C: add $a0, $t0, $zero
+0x00400120: syscall
+0x00400124: j 0x00400134 # -> Code+0x134
+0x00400128: addi $v0, $zero, 1
+0x0040012C: add $a0, $t0, $zero
+0x00400130: syscall
+0x00400134: addi $s1, $s1, 4
+0x00400138: addi $a0, $zero, 10
+0x0040013C: addi $v0, $zero, 11
+0x00400140: syscall
+0x00400144: lw $t0, 0($s0)
+0x00400148: addi $t9, $zero, 0
+0x0040014C: add $s1, $s0, $zero
+0x00400150: add $s0, $zero, $t0
+0x00400154: jr $ra
+0x00400158: lw $t2, -8($s0)
+0x0040015C: lui $at, 0x7f00
+0x00400160: ori $t5, $at, 0x0
+0x00400164: lui $at, 0x1fff
+0x00400168: ori $t6, $at, 0xffff
+0x0040016C: and $t1, $t1, $t6
+0x00400170: or $t1, $t1, $t5
+0x00400174: sw $t2, 0($t1)
+0x00400178: sw $zero, 4($t1)
+0x0040017C: lw $t1, 0($s1)
+0x00400180: addi $t0, $s0, -16
+0x00400184: sw $t1, 0($t0)
+0x00400188: addi $s1, $s1, 4
+0x0040018C: addi $s1, $s1, -4
+0x00400190: addi $t1, $zero, 1
+0x00400194: sw $t1, 0($s1)
+0x00400198: lw $t1, 0($s1)
+0x0040019C: addi $t0, $s0, -20
+0x004001A0: sw $t1, 0($t0)
+0x004001A4: addi $s1, $s1, 4
+0x004001A8: add $t0, $s0, $zero
+0x004001AC: addi $s1, $s1, -4
+0x004001B0: lw $t1, -16($t0)
+0x004001B4: sw $t1, 0($s1)
+0x004001B8: lw $t1, 0($s1)
+0x004001BC: srl $t1, $t1, 29
+0x004001C0: addi $t2, $zero, 4
+0x004001C4: beq $t1, $t2, 0x004001CC # -> Code+0x1CC
+0x004001C8: j 0x0040027C # -> Code+0x27C
+0x004001CC: lw $t1, 0($s1)
+0x004001D0: lui $at, 0x1fff
+0x004001D4: ori $t2, $at, 0xffff
+0x004001D8: and $t1, $t1, $t2
+0x004001DC: sw $t1, 0($s1)
+0x004001E0: sw $ra, -4($s1)
+0x004001E4: addi $s1, $s1, -4
+0x004001E8: addi $s1, $s1, -4
+0x004001EC: sw $t0, 0($s1)
+0x004001F0: addi $s1, $s1, -4
+0x004001F4: sw $t1, 0($s1)
+0x004001F8: addi $s1, $s1, -4
+0x004001FC: sw $zero, 0($s1)
+0x00400200: add $t0, $s0, $zero
+0x00400204: addi $s1, $s1, -4
+0x00400208: lw $t1, -20($t0)
+0x0040020C: sw $t1, 0($s1)
+0x00400210: add $t0, $s5, $zero
+0x00400214: addi $s5, $s5, 12
+0x00400218: addi $t1, $zero, 8
+0x0040021C: sw $t1, 0($t0)
+0x00400220: addi $t1, $zero, 97
+0x00400224: sw $t1, 4($t0)
+0x00400228: addi $t1, $zero, 98
+0x0040022C: sw $t1, 8($t0)
+0x00400230: addi $s1, $s1, -4
+0x00400234: sw $t0, 0($s1)
+0x00400238: addi $s1, $s1, 20
+0x0040023C: lw $t2, 4($s1)
+0x00400240: lw $t1, 0($s1)
+0x00400244: sw $t1, 4($s1)
+0x00400248: sw $s0, 0($s1)
+0x0040024C: add $s0, $s1, $zero
+0x00400250: addi $s1, $s1, -20
+0x00400254: jal 0x00400004 # -> Code+0x4
+0x00400258: addi $ra, $t1, 8
+0x0040025C: jr $t2
+0x00400260: addi $s1, $s1, 8
+0x00400264: lw $ra, -4($s1)
+0x00400268: addi $a0, $zero, 10
+0x0040026C: addi $v0, $zero, 11
+0x00400270: syscall
+0x00400274: addi $v0, $zero, 10
+0x00400278: syscall
+0x0040027C: addi $v0, $zero, 11
+0x00400280: addi $a0, $zero, 69
+0x00400284: syscall
+0x00400288: addi $a0, $zero, 82
+0x0040028C: syscall
+0x00400290: addi $a0, $zero, 82
+0x00400294: syscall
+0x00400298: addi $a0, $zero, 79
+0x0040029C: syscall
+0x004002A0: addi $a0, $zero, 82
+0x004002A4: syscall
+0x004002A8: addi $a0, $zero, 10
+0x004002AC: syscall
+0x004002B0: addi $v0, $zero, 10
+0x004002B4: syscall

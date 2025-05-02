@@ -31,8 +31,8 @@ addi $t9,$zero,1
 # Algorithm
 add $t2,$ra,$zero # save current ra
 jal pathfinder # find path of next line
-addi $t1,$t1,28 # address to start the function
 add $ra,$t2,$zero # restore ra
+addi $t1,$t1,28 # address to start the function
 li $t2,0x80000000
 or $t1,$t1,$t2
 addi $s1,$s1,-4
@@ -132,15 +132,16 @@ addi $t2,$zero,4
 beq $t1,$t2,label8
 j error # if wrong type
 label8:# type check over 
-
 lw $t1, 0($s1)
-li $t2,0x1FFFFFFF
-and $t3, $t1, $t2
-sw $t3, 0($s1)
+
+#li $t2,0x1FFFFFFF
+#and $t3, $t1, $t2
+#sw $t3, 0($s1)
 
 # function called
-sw $ra,-4($s1)
+sw $ra,0($s1) #sw $ra,-4($s1)
 addi $s1,$s1,-4
+sw $s0,0($s1) #
 
 # Getting Arguments
 
@@ -154,8 +155,6 @@ sw $t1,0($s1)
 
 # third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-# lw $t2,-8($t0)
-# sw $t2,0($s1)
 sw $zero,0($s1)
 
 # All other arguments
@@ -221,10 +220,10 @@ sw $t1,0($s1)
 
 # Making a stack frame
 addi $s1,$s1,16
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
+lw $t1,-8($s1) #lw $t2,4($s1)
+li $t2,0x1FFFFFFF #lw $t1,0($s1)
+and $t2, $t1, $t2 #sw $t1,4($s1)
+#sw $s0,0($s1)
 add $s0,$s1,$zero
 addi $s1,$s1,-16
 
@@ -327,7 +326,7 @@ jr $ra # return
 
 
 
-# return whatever is on the top of stack
+# return
 lw $t0,0($s0)
 addi $t9,$zero,0
 add $s1,$s0,$zero
@@ -362,15 +361,16 @@ addi $t2,$zero,4
 beq $t1,$t2,label17
 j error # if wrong type
 label17:# type check over 
-
 lw $t1, 0($s1)
-li $t2,0x1FFFFFFF
-and $t3, $t1, $t2
-sw $t3, 0($s1)
+
+#li $t2,0x1FFFFFFF
+#and $t3, $t1, $t2
+#sw $t3, 0($s1)
 
 # function called
-sw $ra,-4($s1)
+sw $ra,0($s1) #sw $ra,-4($s1)
 addi $s1,$s1,-4
+sw $s0,0($s1) #
 
 # Getting Arguments
 
@@ -384,8 +384,6 @@ sw $t1,0($s1)
 
 # third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-# lw $t2,-8($t0)
-# sw $t2,0($s1)
 sw $zero,0($s1)
 
 # All other arguments
@@ -396,10 +394,10 @@ sw $t1,0($s1)
 
 # Making a stack frame
 addi $s1,$s1,16
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
+lw $t1,-8($s1) #lw $t2,4($s1)
+li $t2,0x1FFFFFFF #lw $t1,0($s1)
+and $t2, $t1, $t2 #sw $t1,4($s1)
+#sw $s0,0($s1)
 add $s0,$s1,$zero
 addi $s1,$s1,-16
 
@@ -474,8 +472,8 @@ syscall
 label21:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
-addi $a0, $zero, 10
-addi $v0, $zero, 11 
+addi $a0,$zero,10
+addi $v0,$zero,11 
 syscall
 
 

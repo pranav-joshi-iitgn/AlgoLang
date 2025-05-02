@@ -1,10 +1,9 @@
-# This code can be run on the SPIM simulator. It can be installed on debian/ubuntu as :
-# `sudo apt-get install spim`
-# Then, you can run the code as `spim -f <filename>`
+# This code can be run on the Virtual Machine PyVM that comes bundled with the project
 
 .data
 .text
 .globl main
+j main # this is because the VM goes to the first line directly, and not to main.
 
 pathfinder:
 add $t1,$ra,$zero
@@ -31,14 +30,15 @@ addi $t9,$zero,1
 # Algorithm
 add $t2,$ra,$zero # save current ra
 jal pathfinder # find path of next line
-addi $t1,$t1,28 # address to start the function
 add $ra,$t2,$zero # restore ra
-li $t2,0x80000000
+addi $t1,$t1,28 # address to start the function
+#li $t2,0x80000000 # gives 2 base instructions..bad
+sll $t2,$t8,31
 or $t1,$t1,$t2
 addi $s1,$s1,-4
 sw $t1,0($s1)
-j label23 # skip function
-label22:
+j label21 # skip function
+label20:
 
 # x is -16($s0)
 
@@ -114,45 +114,28 @@ jr $ra # return
 addi $t9,$zero,1
 label3: # end if
 
-# getting f
+# getting self
 add $t0,$s0,$zero
-add $t4,$zero,$t0 # make a copy
-lw $t0,-12($t0) # fake parent stack
-bne $t0,$zero,label4 # even the fake parent is dead .. 1 
-li $t5,0x7F000000
-li $t6,0x1FFFFFFF
-lw $t1,-8($t4) # self
-and $t1,$t1,$t6
-or $t1,$t1,$t5
-lw $t2,0($t1) # parent
-lw $t0,-4($t4)
-lw $t3,-8($t0) # self_new
-beq $t3,$t2,label4
-and $t2,$t2,$t6
-or $t2,$t2,$t5
-lw $t0,4($t2) # depend on fake parent
-beq $t0,$zero,error # even the fake parent is dead ... 2
-sw $t0,-12($t4) # update the fake parent
-label4:# creator alive checking over
 addi $s1,$s1,-4
-lw $t1,-16($t0)
+lw $t1,-8($t0)
 sw $t1,0($s1) 
 # assert type is alg
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label9
+beq $t1,$t2,label8
 j error # if wrong type
-label9:# type check over 
-
+label8:# type check over 
 lw $t1, 0($s1)
-li $t2,0x1FFFFFFF
-and $t3, $t1, $t2
-sw $t3, 0($s1)
+
+#li $t2,0x1FFFFFFF
+#and $t3, $t1, $t2
+#sw $t3, 0($s1)
 
 # function called
-sw $ra,-4($s1)
+sw $ra,0($s1) #sw $ra,-4($s1)
 addi $s1,$s1,-4
+sw $s0,0($s1) #
 
 # Getting Arguments
 
@@ -166,8 +149,6 @@ sw $t1,0($s1)
 
 # third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-# lw $t2,-8($t0)
-# sw $t2,0($s1)
 sw $zero,0($s1)
 
 # All other arguments
@@ -196,47 +177,47 @@ lw $t1,0($s1)
 add $t7,$zero,$zero 
 addi $t4,$t4,7
 srl $t3,$t1,29
-beq $t3,$t4,label6
-beq $t3,$zero,label6
+beq $t3,$t4,label5
+beq $t3,$zero,label5
 addi $t7,$zero,1 # we know now that t1 is a float
-label6: # t1 is int
+label5: # t1 is int
 
 # Assume t2 is an int
 srl $t3,$t2,29
-beq $t3,$t4,label7
-beq $t3,$zero,label7
+beq $t3,$t4,label6
+beq $t3,$zero,label6
 # t2 is a float now
 mtc1 $t1,$f1
 mtc1 $t2,$f2
-bne $t7,$zero,label_float7 # if t1 was a float too, jump to adition
+bne $t7,$zero,label_float6 # if t1 was a float too, jump to adition
 cvt.s.w $f1,$f1 # if not, convert t1 to float
-j label_float7 # j to float subtraction
+j label_float6 # j to float subtraction
 
-label7: # t2 is int
-bne $t7,$zero,label_float_conv7 # if t1 was a float, jump to conversion
+label6: # t2 is int
+bne $t7,$zero,label_float_conv6 # if t1 was a float, jump to conversion
 
-label_int7: # int subtraction
+label_int6: # int subtraction
 sub $t1,$t1,$t2
-j label8 # finish
+j label7 # finish
 
-label_float_conv7: # conversion of t2 to float
+label_float_conv6: # conversion of t2 to float
 mtc1 $t1,$f1
 mtc1 $t2,$f2
 cvt.s.w $f2,$f2
 
-label_float7: # float subtraction
+label_float6: # float subtraction
 sub.s $f1,$f1,$f2
 mfc1 $t1,$f1
 
-label8: # finish
+label7: # finish
 sw $t1,0($s1)
 
 # Making a stack frame
 addi $s1,$s1,16
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
+lw $t1,-8($s1) #lw $t2,4($s1)
+li $t2,0x1FFFFFFF #lw $t1,0($s1)
+and $t2, $t1, $t2 #sw $t1,4($s1)
+#sw $s0,0($s1)
 add $s0,$s1,$zero
 addi $s1,$s1,-16
 
@@ -252,45 +233,28 @@ lw $ra,0($s1)
 sw $t1,0($s1)
 
 
-# getting f
+# getting self
 add $t0,$s0,$zero
-add $t4,$zero,$t0 # make a copy
-lw $t0,-12($t0) # fake parent stack
-bne $t0,$zero,label10 # even the fake parent is dead .. 1 
-li $t5,0x7F000000
-li $t6,0x1FFFFFFF
-lw $t1,-8($t4) # self
-and $t1,$t1,$t6
-or $t1,$t1,$t5
-lw $t2,0($t1) # parent
-lw $t0,-4($t4)
-lw $t3,-8($t0) # self_new
-beq $t3,$t2,label10
-and $t2,$t2,$t6
-or $t2,$t2,$t5
-lw $t0,4($t2) # depend on fake parent
-beq $t0,$zero,error # even the fake parent is dead ... 2
-sw $t0,-12($t4) # update the fake parent
-label10:# creator alive checking over
 addi $s1,$s1,-4
-lw $t1,-16($t0)
+lw $t1,-8($t0)
 sw $t1,0($s1) 
 # assert type is alg
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label15
+beq $t1,$t2,label13
 j error # if wrong type
-label15:# type check over 
-
+label13:# type check over 
 lw $t1, 0($s1)
-li $t2,0x1FFFFFFF
-and $t3, $t1, $t2
-sw $t3, 0($s1)
+
+#li $t2,0x1FFFFFFF
+#and $t3, $t1, $t2
+#sw $t3, 0($s1)
 
 # function called
-sw $ra,-4($s1)
+sw $ra,0($s1) #sw $ra,-4($s1)
 addi $s1,$s1,-4
+sw $s0,0($s1) #
 
 # Getting Arguments
 
@@ -304,8 +268,6 @@ sw $t1,0($s1)
 
 # third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-# lw $t2,-8($t0)
-# sw $t2,0($s1)
 sw $zero,0($s1)
 
 # All other arguments
@@ -334,47 +296,47 @@ lw $t1,0($s1)
 add $t7,$zero,$zero 
 addi $t4,$t4,7
 srl $t3,$t1,29
-beq $t3,$t4,label12
-beq $t3,$zero,label12
+beq $t3,$t4,label10
+beq $t3,$zero,label10
 addi $t7,$zero,1 # we know now that t1 is a float
-label12: # t1 is int
+label10: # t1 is int
 
 # Assume t2 is an int
 srl $t3,$t2,29
-beq $t3,$t4,label13
-beq $t3,$zero,label13
+beq $t3,$t4,label11
+beq $t3,$zero,label11
 # t2 is a float now
 mtc1 $t1,$f1
 mtc1 $t2,$f2
-bne $t7,$zero,label_float13 # if t1 was a float too, jump to adition
+bne $t7,$zero,label_float11 # if t1 was a float too, jump to adition
 cvt.s.w $f1,$f1 # if not, convert t1 to float
-j label_float13 # j to float subtraction
+j label_float11 # j to float subtraction
 
-label13: # t2 is int
-bne $t7,$zero,label_float_conv13 # if t1 was a float, jump to conversion
+label11: # t2 is int
+bne $t7,$zero,label_float_conv11 # if t1 was a float, jump to conversion
 
-label_int13: # int subtraction
+label_int11: # int subtraction
 sub $t1,$t1,$t2
-j label14 # finish
+j label12 # finish
 
-label_float_conv13: # conversion of t2 to float
+label_float_conv11: # conversion of t2 to float
 mtc1 $t1,$f1
 mtc1 $t2,$f2
 cvt.s.w $f2,$f2
 
-label_float13: # float subtraction
+label_float11: # float subtraction
 sub.s $f1,$f1,$f2
 mfc1 $t1,$f1
 
-label14: # finish
+label12: # finish
 sw $t1,0($s1)
 
 # Making a stack frame
 addi $s1,$s1,16
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
+lw $t1,-8($s1) #lw $t2,4($s1)
+li $t2,0x1FFFFFFF #lw $t1,0($s1)
+and $t2, $t1, $t2 #sw $t1,4($s1)
+#sw $s0,0($s1)
 add $s0,$s1,$zero
 addi $s1,$s1,-16
 
@@ -396,48 +358,48 @@ lw $t1,0($s1)
 # if t1 is a list or t2 is a list, then jump
 addi $t4,$zero,3
 srl $t3,$t2,29
-beq $t3,$t4,label18
+beq $t3,$t4,label16
 srl $t3,$t1,29
-beq $t3,$t4,label18
+beq $t3,$t4,label16
 
 # assume both types are int
 add $t7,$zero,$zero # assume t1 is not a float
 addi $t4,$t4,7
 srl $t3,$t1,29
-beq $t3,$t4,label16
-beq $t3,$zero,label16
+beq $t3,$t4,label14
+beq $t3,$zero,label14
 addi $t7,$zero,1 # we know now that t1 is a float
 
-label16: # t1 is int
+label14: # t1 is int
 srl $t3,$t2,29
-beq $t3,$t4,label17
-beq $t3,$zero,label17
+beq $t3,$t4,label15
+beq $t3,$zero,label15
 # t2 is a float now
 mtc1 $t1,$f1
 mtc1 $t2,$f2
-bne $t7,$zero,label_float17 # if t1 was a float too, jump to adition
+bne $t7,$zero,label_float15 # if t1 was a float too, jump to adition
 cvt.s.w $f1,$f1 # if not, convert t1 to float
-j label_float17 # j to float addition
+j label_float15 # j to float addition
 
-label17: # t2 is int
-bne $t7,$zero,label_float_conv17 # if t1 was a float, jump to conversion
+label15: # t2 is int
+bne $t7,$zero,label_float_conv15 # if t1 was a float, jump to conversion
 
-label_int17: # int addition
+label_int15: # int addition
 add $t1,$t1,$t2
-j label19 # finish
+j label17 # finish
 
-label_float_conv17: # conversion of t2 to float
+label_float_conv15: # conversion of t2 to float
 mtc1 $t1,$f1
 mtc1 $t2,$f2
 cvt.s.w $f2,$f2
 
-label_float17: # float addition
+label_float15: # float addition
 add.s $f1,$f1,$f2
 mfc1 $t1,$f1
-j label19 #finish
+j label17 #finish
 
 
-label18: # list
+label16: # list
 # concatenate lists
 lw $t3,0($t1) # 4*n1
 lw $t4,0($t2) # 4*n2
@@ -448,28 +410,28 @@ addi $s5,$s5,4 # s5 += 4
 sw $t5,0($t0) # store size first
 add $t6,$t0,$zero
 # Add stuff from first list to new allocated space
-label_t1_19:
+label_t1_17:
 slt $t7,$zero,$t3 # t3 > 0
-beq $t7,$zero,label_t2_19 # done adding
+beq $t7,$zero,label_t2_17 # done adding
 addi $t6,$t6,4
 addi $t1,$t1,4
 lw $t7,0($t1)
 sw $t7,0($t6)
 addi $t3,$t3,-4
-j label_t1_19
-label_t2_19: # add struff from second list
+j label_t1_17
+label_t2_17: # add struff from second list
 slt $t7,$zero,$t4 # t3 > 0
-beq $t7,$zero,label_t2_end_19 # done adding
+beq $t7,$zero,label_t2_end_17 # done adding
 addi $t6,$t6,4
 addi $t2,$t2,4
 lw $t7,0($t2)
 sw $t7,0($t6)
 addi $t4,$t4,-4
-j label_t2_19
-label_t2_end_19: # end adding from 2nd list
+j label_t2_17
+label_t2_end_17: # end adding from 2nd list
 add $t1,$t0,$zero
 
-label19: # finish
+label17: # finish
 
 sw $t1,0($s1)
 # return
@@ -478,15 +440,15 @@ sw $t1,0($s1)
 # ignore the return value at top of stack
 
 addi $t0,$s1,4 # initialise pointer
-label20: # put a value on heap
+label18: # put a value on heap
 sgt $t3,$t0,$s0 # check if base is crossed, which happens when $t0 > $s0
-bne $t3,$zero,label21 # if crossed, stop
+bne $t3,$zero,label19 # if crossed, stop
 lw $t1,0($t0) # get value from stack
 sw $t1,0($s5) # put value on heap
 addi $t0,$t0,4 # move stack pointer
 addi $s5,$s5,4 # move heap pointer
-j label20 # repeat until all values are copied
-label21:# finished putting value
+j label18 # repeat until all values are copied
+label19:# finished putting value
 lw $t1,-8($s0) # get self
 li $t5,0x7F000000
 li $t6,0x1FFFFFFF
@@ -509,13 +471,13 @@ jr $ra # return
 
 
 
-# return whatever is on the top of stack
+# return
 lw $t0,0($s0)
 addi $t9,$zero,0
 add $s1,$s0,$zero
 add $s0,$zero,$t0
 jr $ra
-label23: # end of function
+label21: # end of function
 
 # Add this to parent pointer tree
 lw $t2,-8($s0) # parent
@@ -541,18 +503,19 @@ sw $t1,0($s1)
 lw $t1,0($s1)
 srl $t1,$t1,29
 addi $t2,$zero,4
-beq $t1,$t2,label24
+beq $t1,$t2,label22
 j error # if wrong type
-label24:# type check over 
-
+label22:# type check over 
 lw $t1, 0($s1)
-li $t2,0x1FFFFFFF
-and $t3, $t1, $t2
-sw $t3, 0($s1)
+
+#li $t2,0x1FFFFFFF
+#and $t3, $t1, $t2
+#sw $t3, 0($s1)
 
 # function called
-sw $ra,-4($s1)
+sw $ra,0($s1) #sw $ra,-4($s1)
 addi $s1,$s1,-4
+sw $s0,0($s1) #
 
 # Getting Arguments
 
@@ -566,22 +529,20 @@ sw $t1,0($s1)
 
 # third is the stack base of fake parent, initially 0
 addi $s1,$s1,-4
-# lw $t2,-8($t0)
-# sw $t2,0($s1)
 sw $zero,0($s1)
 
 # All other arguments
-# int 20
+# int 10
 addi $s1,$s1,-4
-li $t1,20
+li $t1,10
 sw $t1,0($s1)
 
 # Making a stack frame
 addi $s1,$s1,16
-lw $t2,4($s1)
-lw $t1,0($s1)
-sw $t1,4($s1)
-sw $s0,0($s1)
+lw $t1,-8($s1) #lw $t2,4($s1)
+li $t2,0x1FFFFFFF #lw $t1,0($s1)
+and $t2, $t1, $t2 #sw $t1,4($s1)
+#sw $s0,0($s1)
 add $s0,$s1,$zero
 addi $s1,$s1,-16
 
@@ -602,31 +563,31 @@ lw $t0,0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
 addi $t4,$zero,4
-beq $t1,$zero,label27 # 000 -> int
-beq $t1,$t3,label27 # 111 -> int
-beq $t1,$t4,label_alg27 # 100 -> alg .. printed as int
+beq $t1,$zero,label25 # 000 -> int
+beq $t1,$t3,label25 # 111 -> int
+beq $t1,$t4,label_alg25 # 100 -> alg .. printed as int
 addi $t3,$zero,3
-bne $t1,$t3,label26 # 011 is for str
+bne $t1,$t3,label24 # 011 is for str
 
 # print a string
 lw $t1,0($t0) # 4n
 addi $v0,$zero,11 # for printing characters
-label25: # print character routine
+label23: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label28 # if t1 <= 0, finish
+beq $t3,$zero,label26 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label25 # continue printing characters
+j label23 # continue printing characters
 
-label26:#print float
+label24:#print float
 addi $v0,$zero,2
 mtc1 $t0,$f12
 syscall
-j label28
+j label26
 
-label_alg27:#print alg
+label_alg25:#print alg
 addi $v0,$zero,11
 addi $a0,$zero,'a'
 syscall
@@ -645,19 +606,19 @@ syscall
 addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
-j label28
+j label26
 
 
-label27:#print int
+label25:#print int
 addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
 
-label28:# end print
+label26:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
-addi $a0, $zero, 10
-addi $v0, $zero, 11 
+addi $a0,$zero,10
+addi $v0,$zero,11 
 syscall
 
 

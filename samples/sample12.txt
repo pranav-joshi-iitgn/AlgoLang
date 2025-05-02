@@ -2,6 +2,6 @@
 let L = [];
 dict L;
 L["1"] = 2;
-print "length : " + str(len(L)) + nl;
-print 'keys : ' + str(keys(L)) + nl;
+print "length : " + int2str(len(L)) + nl;
+print 'keys : ' + int2str(keys(L)) + nl;
 print L;
