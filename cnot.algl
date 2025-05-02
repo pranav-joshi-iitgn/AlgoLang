@@ -1,0 +1,12 @@
+let x;
+let i = 0;
+let count = 0;
+while i < 100 {
+clearQ;
+QG X 0;
+QG CNOT 0 1;
+measure 1 into x;
+count = count + x;
+i = i + 1;
+}
+print count/100;

@@ -1,0 +1,4 @@
+QG H 1;
+let x;
+measure 1 into x reps 100;
+print x;

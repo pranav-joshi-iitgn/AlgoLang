@@ -1,3 +1,13 @@
+"""
+This is the lexer module for AlgoLang.
+This contains the DFA used to implement the lexer, list of keywords,
+and funtions for syntax highlighting
+
+AUTHOR: Pranav Joshi
+email : pranav.joshi@iitgn.ac.in
+Roll  : 22110197
+"""
+
 digits = "0123456789"
 alphas = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_"
 dot = "."
@@ -17,7 +27,8 @@ keywords = [
     "print","delete",
     'run','list','return','alg',
     'with','vec','plot','breakloop',
-    'skipit','mod','div','let'
+    'skipit','mod','div','let',
+    "QG","measure","into","all"
 ]
 
 chartypes = [
@@ -88,6 +99,10 @@ def lex(s:str,keep_spaces = False,keep_comments = False):
             current = current + x
             state = ns
             i += 1
+    if current :
+        if state == 'id' and current in keywords:state = "kw"
+        token = (state,current)
+        tokens.append(token)
     return tokens
 
 
@@ -101,7 +116,7 @@ def remove_comments(s:str):
 
 COLOR = {
     "id":"\x1b[38;2;100;200;255m",#blue
-    "str":"\x1b[38;2;170;50;50m",#red
+    "str":"\x1b[38;2;100;50;50m",#red
     "int":"\x1b[38;2;0;255;0m",#green
     "float":"\x1b[38;2;0;255;0m",#green
     "kw":"\x1b[38;2;255;170;170m",#pink
@@ -111,6 +126,29 @@ COLOR = {
     "op1=":"\x1b[38;2;255;255;0m",#yellow
     "op12":"\x1b[38;2;255;255;0m",#yellow
     "com":"\x1b[38;2;150;150;150m",#grayeen
+    "\'str":"\x1b[38;2;255;0;0m",#dark red
+    "\"str":"\x1b[38;2;255;0;0m",#dark red
+}
+
+COLOR_MAP_PT = {
+    "id": "#64c8ff",  # blue
+    "str": "#aa3232",  # red
+    "int": "#00ff00",  # green
+    "float": "#00ff00",  # green
+    "kw": "#ffaa96",   # pink # Adjusted from #ffaaaa to have more contrast
+    "op1": "#ffff00",  # yellow
+    "op2": "#ffff00",  # yellow
+    "op2=": "#ffff00", # yellow
+    "op1=": "#ffff00", # yellow
+    "op12": "#ffff00", # yellow
+    "brak": "",        # Use default color for brackets
+    "com": "#969696",  # gray
+    "unknown": "bg:#ff0000 #ffffff", # White on Red background for errors
+    "sp": "",          # Use default for spaces/newlines
+    "\"str": "#aa3232", # red
+    "\'str": "#aa3232", # red
+    "id.": "#64c8ff",  # blue
+    "com_": "#969696", # gray
 }
 
 def HighLight(s):

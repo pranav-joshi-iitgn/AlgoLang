@@ -1,0 +1,5 @@
+QG X 0;
+QG X 1;
+let x;
+measure all into x;
+print x;

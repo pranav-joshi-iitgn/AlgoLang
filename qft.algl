@@ -1,0 +1,25 @@
+let pi = 1415926535;
+let k = 0;
+let j;
+let theta;
+while k < 5{
+    QG H k;
+    j = k+1;
+    while j < 5 {
+        theta = pi/(2^(j-k));
+        QG CP theta j k;
+        j = j + 1;
+    } 
+    k = k + 1;
+}
+# swap 0 and 4
+
+QG CNOT 0 4;
+QG CNOT 4 0;
+QG CNOT 0 4;
+
+# swap 1 and 3
+
+QG CNOT 1 3;
+QG CNOT 3 1;
+QG CNOT 1 3;

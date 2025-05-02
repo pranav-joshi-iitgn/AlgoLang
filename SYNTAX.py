@@ -14,7 +14,17 @@ Roll  : 22110197
 from LEXER import *
 import termplotlib as plt #for `plot` statement
 from numpy import * #for vectors
-import struct
+import struct #for initialising floats in compiler
+QUANTUM_ENABLE = True #for quantum computing
+ADD_SYSCALLS = True #len,int,float,int2str,etc.
+if QUANTUM_ENABLE:
+    from qiskit import QuantumCircuit, transpile
+    from qiskit_aer import Aer
+    QR = QuantumCircuit(5,1) 
+    # 2^5 = 32 states.
+    # This makes simulation easy if someone ever needs to simulate in a normal mips processor
+    # We can easily store 32 floating points to represent the current state
+    # Moreover Rigetti Agave uses a 5 qubit architecture, so this isn't too bad.
 
 # global variable for visualisation of AST
 from graphviz import Digraph
@@ -23,7 +33,7 @@ cur_node = 0
 labels = 0
 
 # settings
-DEBUG_WITH_COLOR = False
+DEBUG_WITH_COLOR = True
 TESTING = False
 FAST = False
 
@@ -49,6 +59,7 @@ class Node:
     Every Non-terminal has a `parse` and `eval` method
     """
     name = "Node"
+    Type = None # None means unknown
     def __init__(self):
         self.children = []
         self.value = None
@@ -119,10 +130,10 @@ class Number(Token):
 
 class Int(Number):
     name = "int"
-    Type = int
+    Type = "int"
     def eval(self):return int(self.value)
 
-    def MIPS(self):
+    def MIPS(self,ls=True):
         """
         Puts the value on the top of stack
         """
@@ -130,37 +141,36 @@ class Int(Number):
             raise RuntimeError(f"integer {self.value} is too big.")
         return "\n".join([
             f"# int {self.value}",
-            "addi $s1,$s1,-4",
             f"li $t1,{self.value}",
-            "sw $t1,0($s1)"
+            "addi $s1,$s1,-4" if ls else "",
+            "sw $t1,0($s1)" if ls else "",
         ])
 
 class Float(Number):
     name = "float"
-    Type = float
+    Type = "float"
     def eval(self):return float(self.value)
-    def MIPS(self):
+    def MIPS(self,ls=True):
         v = float(self.value)
         v = ''.join('{:08b}'.format(b) for b in struct.pack('>f', v))
         if v[:3] not in TYPES["float"]: raise RuntimeError(f"{self.value} is too large or small")
         v = int(v,2)
         return "\n".join([
             f"# float {self.value}",
-            "addi $s1,$s1,-4",
             f"li $t1,{v}",
-            "sw $t1,0($s1)"
+            "addi $s1,$s1,-4" if ls else "",
+            "sw $t1,0($s1)" if ls else "",
         ])
 
 class Str(Token):
     name = "str"
-    Type = str
+    Type = "str"
     def __init__(self,value):
         assert (
             (value[0] == '"' and value[-1] == '"')
             or
             (value[0] == "'" and value[-1] == "'")
         ), "Strings must be enclosed in quotes"
-        #self.value = literal_eval(value)
         self.value = value[1:-1]
         self.name = self.value
     def eval(self):
@@ -194,6 +204,7 @@ class Id(Token):
     >>> x = Id("x")
     """
     name = "id"
+    Type = None
     def __init__(self,value:str):
         self.value = value
         self.name = value
@@ -206,7 +217,7 @@ class Id(Token):
                 return SYMBOLS[x]
         raise ValueError(f"undefined variable {x}")
 
-    def MIPS(self,up=False):
+    def MIPS(self,up=False,ls=True):
         """
         Gets the value of the identifier and puts it on stack.
         If `up` is set to `True` then it gets the top value in stack and updates the variable instead.
@@ -220,7 +231,7 @@ class Id(Token):
         x = self.value
         N = len(SYMBOLSTACK)
         code = [
-            f"# getting {self.name}",
+            f"# getting frame containing {self.name}",
             "add $t0,$s0,$zero",
         ]
         for lev in range(N-1,-1,-1):
@@ -229,15 +240,17 @@ class Id(Token):
                 v = SYMBOLS[x]
                 if not up:
                     code.extend([
-                        "addi $s1,$s1,-4",
+                        f"# getting {self.name}",
+                        "addi $s1,$s1,-4" if ls else "# skipping adding space",
                         f"lw $t1,{-4*v}($t0)",
-                        "sw $t1,0($s1)",
+                        "sw $t1,0($s1)" if ls else "# skipping storing",
                     ])
                 else:
                     code.extend([
-                        "lw $t1,0($s1)",
+                        f"# setting {self.name}",
+                        "lw $t1,0($s1)" if ls else "# assuming value in $t1",
                         f"sw $t1,{-4*v}($t0)",
-                        "addi $s1,$s1,4",
+                        "addi $s1,$s1,4" if ls else "# skipping pop",
                     ])
                 return "\n".join(code)
             else:
@@ -446,6 +459,7 @@ class List(UnaryOperation):
     """
     name = "List"
     opname = "list"
+    Type = "list"
     def other(self):return SOPLogic()
     def op(self,x):
         if isinstance(x,int):return [None]*x
@@ -480,6 +494,7 @@ class Vector(UnaryOperation):
     """
     name = "Vector"
     opname = "vec"
+    Type = "vec"
     def other(self):return SOPLogic()
     def op(self,x):
         if x is None: raise ValueError("give the size of the array please")
@@ -1051,6 +1066,9 @@ class SingleStatement(Node):
         elif s[0][1] == "skipit":left = Continue()
         elif s[0][1] == "let":left = Definition()
         elif s[0][1] == "delete":left = Deletion()
+        elif s[0][1] == "QG":left = QGate()
+        elif s[0][1] == "measure":left = Measurement()
+        elif s[0][1] == "clearQ":left = ClearQC()
         else:left = Assignment()
         try:res = left.parse(s[:-1])
         except:return ValueError(on_wrong)
@@ -1077,8 +1095,8 @@ class Definition(Node):
         n = len(s)
         on_wrong = "incorrect definition:\n" + TokensToStr(s,DEBUG_WITH_COLOR)
         if not n>=2: return ValueError(on_wrong)
-        if not s[0][1] == "let": return ValueError(on_wrong)
-        child = Token("let")
+        if s[0][1] in ["let"]: child = Token(s[0][1])
+        else: return ValueError(on_wrong)
         self.children = [child]
         if not s[1][0] == "id": return ValueError(on_wrong)
         if s[1][1] in RESTRICTED: return ValueError(f"cannot set the read-only variable {s[1][1]} :\n" + TokensToStr(s,DEBUG_WITH_COLOR))
@@ -1371,22 +1389,9 @@ class ReturnStatement(Node):
         val = self.children[1]
         val = val.MIPS()
         labels += 2
-        recreate = True
-        recreate = "" if recreate else "#"
+        recreate = (not FAST)
+        recreate = "" if recreate else "# (skipped by compiler since FAST) : "
         return val + "\n" + open("helpers/return.s").read().format(labels=labels,labelsm1=labels-1,recreate=recreate)
-        return "\n".join([
-            val,
-            "# return",
-            "lw $t0,0($s0)",
-
-            "lw $t1,0($s1)",
-            "sw $t1,0($s0)",
-            "addi $t9,$zero,1",
-
-            "add $s1,$s0,$zero",
-            "add $s0,$zero,$t0",
-            "jr $ra",
-        ])
 
 class Dictionary(Node):
     """
@@ -1719,7 +1724,7 @@ class EnclosedValues(Node):
                         f"lw $t1,{4*i}($s1)",
                         f"sw $t1,{-4*i-4}($s5)",
                         ]) for i in range(n)]),
-                    f"addi $s1,{4 * (n-1)} # pop stack {n-1} times",
+                    f"addi $s1,$s1,{4 * (n-1)} # pop stack {n-1} times",
                     f"addi $t0,$s5,{-4*n -4} # old $s5 value",
                     f"sw $t0,0($s1) # store pointer on heap",
                     f"addi $t1,$zero,{4*n}",
@@ -1814,8 +1819,7 @@ class Algorithm(Node):
         # All that matters is that the user should never be able to access -4($s0) and -12($s0) using just the language
         # This is because it holds the base of the creator on this algorithm and base of current algorithm
         arg = arg.MIPS()
-        # TODO : Add f.env support so that the function can be returned.
-        code = f.MIPS()
+        code = f.MIPS() # f will always be a Block. It's unnatural for `alg` to be used with a SysCall
         labels += 2
         start = f"label{labels-1}"
         end = f"label{labels}"
@@ -1898,13 +1902,14 @@ class CommaSeparatedValues(Node):
         elif not wrap and n == 1:return self.children[0].MIPS()
         else : return "\n\n".join([x.MIPS() for x in self.children[::2]])
 
-def TypeCheck(Type):
-    global labels
+def TypeCheck(Type,load=True):
+    global labels,FAST
+    if FAST : return "# skipping type checking"
     FirstThree = TYPES[Type] # This is a list of possible first 3 bits
     labels += 1
     to_ret =  "\n".join([
         f"# assert type is {Type}",
-        "lw $t1,0($s1)",
+        "lw $t1,0($s1)" if load else "# assuming value in $t1",
         "srl $t1,$t1,29",
         "\n".join([f"addi $t2,$zero,{int(x,2)}\nbeq $t1,$t2,label{labels}" for x in FirstThree]),
         "j error # if wrong type",
@@ -1958,14 +1963,18 @@ class FunctionCall(Node):
         jumps to the function
         undoes some of the changes done before the function call
         """
+        global FAST
         L = self.children
-        getaddress = L[0].MIPS()
+        getaddress = L[0].MIPS(ls=(not FAST))
         getargs = L[2].MIPS(True)
         N = len(L[2].children[::2])
+        alllocal = "# (skipping as all variables are local)" if FAST else ""
+        noret = "# (skipping since this will never run outside of scope)" if FAST else ""
+        skipload = "# (skipping load since FAST)" if FAST else ""
         return " \n".join([
             getaddress,
             TypeCheck("alg"),
-            open("helpers/fcall.s").read().format(getargs=getargs,p4Np12=4*N+12,m4Nm12=-4*N-12)
+            open("helpers/fcall.s").read().format(getargs=getargs,p4Np12=4*N+12,m4Nm12=-4*N-12,alllocal=alllocal,noret=noret,skipload=skipload)
         ])
 
 class Assignable(Node):
@@ -2017,7 +2026,7 @@ class Assignable(Node):
             ind = L[2].eval()
             SYMBOLS[x][ind] = value
         else:raise ValueError("This shouldn't be happening")
-    def MIPS(self,up=False):
+    def MIPS(self,up=False,ls=True):
         """
         Generates MIPS code for setting and getting values on arrays, and variables.
         The code is self explanatory. Please read it
@@ -2029,7 +2038,7 @@ class Assignable(Node):
         SYMBOLS = SYMBOLSTACK[-1]
         if v not in SYMBOLS:raise RuntimeError(f"variable {v} not defined yet.")
         v = SYMBOLS[v]
-        if n ==1: return L[0].MIPS(up)
+        if n ==1: return L[0].MIPS(up,ls)
         assert n == 4
         getindex = L[2].MIPS()
         m4v = -4*v
@@ -2079,12 +2088,279 @@ class Deletion(Node):
         else:raise ValueError(f"key {key} not found in {x}")
 
 class SysCall:
-    def __init__(self,name,f):
+    def __init__(self,name,f,mips_code=None):
         self.name = name
         self.f = f
+        self.mips_code=mips_code # This will be the body of the syscall, nothing more than that
+        # you will have a bunch of values on stack. Manipulate those, and leave the result on the top of stack
     def eval(self,args):
         try: return self.f(*args)
         except Exception as e:raise ValueError(f"Error in {self.name} : {e}")
+    def MIPS(self):
+        global labels
+        f = open("helpers/sysdec.s",'r')
+        declaration = f.read()
+        f.close()
+        labels += 2
+        start = f"label{labels-1}"
+        end = f"label{labels}"
+        return declaration.format(code=self.mips_code,start=start,end=end)
+
+class QGate(Node):
+    """
+    Implemets classic quantum gates using the syntax used in quil
+    """ 
+    name="QGate"
+    gates_operands={
+        "X":1,"Y":1,"Z":1,"H":1,"S":1,"T":1,
+        "CNOT":2,"SWAP":2,"CZ":2,"CCNOT":3,"ISWAP":2,
+        "RX":1,"RY":1,"RZ":1,"PHASE":1,
+        "CP":3,"CRX":2,"CRY":2,"CRZ":2,
+        "U":1,"U1":1,"U2":1,"U3":1,"U4":1
+    }
+    gate=None
+    def parse(self,s:list):
+        global QR,QUANTUM_ENABLE
+        if not QUANTUM_ENABLE:return ValueError("Quantum Computing is not enabled")
+        self.value = s
+        n = len(s)
+        if not n > 0 : return ValueError("syntax error in QGate")
+        if not s[0][1] == "QG" : return ValueError("syntax error in QGate")
+        if not s[1][1] in self.gates_operands : return ValueError("syntax error in QGate")
+        if not n == self.gates_operands[s[1][1]] + 2 : return ValueError("syntax error in QGate")
+        self.gate = s[1][1]
+        self.children = [Token("QG"),Token(self.gate)]
+        operands = []
+        for x in s[2:]:
+            if x[0] == "id":operands.append(Id(x[1]))
+            elif x[0] == "int":operands.append(Int(x[1]))
+            elif x[0] == "float":operands.append(Float(x[1]))
+            else:return ValueError(f"unknown operand {x[1]}")
+        self.children.extend(operands)
+    def eval(self):
+        global QR,QUANTUM_ENABLE,service
+        if not QUANTUM_ENABLE:raise ValueError("Quantum Computing is not enabled")
+        L = self.children
+        n = len(L)
+        assert n > 0
+        assert n == self.gates_operands[self.gate] + 2
+        operands = [x.eval() for x in L[2:]]
+        match self.gate:
+            case "X":QR.x(*operands)
+            case "Y":QR.y(*operands)
+            case "Z":QR.z(*operands)
+            case "H":QR.h(*operands)
+            case "S":QR.s(*operands)
+            case "T":QR.t(*operands)
+            case "CNOT":QR.cx(*operands)
+            case "SWAP":QR.swap(*operands)
+            case "CZ":QR.cz(*operands)
+            case "CCNOT":QR.ccnot(*operands)
+            case "ISWAP":QR.iswap(*operands)
+            case "RX":QR.rx(*operands)
+            case "RY":QR.ry(*operands)
+            case "RZ":QR.rz(*operands)
+            case "PHASE":QR.p(*operands)
+            case "CP":QR.cp(*operands) # theta, control_qubit, target_qubit
+            case "CRX":QR.crx(*operands)
+            case "CRY":QR.cry(*operands)
+            case "CRZ":QR.crz(*operands)
+            case "U":QR.u(*operands)
+            case "U1":QR.u1(*operands)
+            case "U2":QR.u2(*operands)
+            case "U3":QR.u3(*operands)
+            case "U4":QR.u4(*operands)
+            case _:raise ValueError(f"unknown gate {self.gate}")
+    """
+    - reset q : Collapses the wave-function so that qubit number q goes to the pure state |0>
+    - h q : Hadamard gate on qubit number q
+    - t q : T gate applied on qubit number q
+    - x q : Pauli-X gate on qubit number q
+    - y q : Pauli-Y gate on qubit number q
+    - z q : Pauli-Z gate on qubit number q
+    - s q : S gate on qubit number q
+    - measure q : Collapses wavefunction so that qubit number q enters a pure state, and stores he result (0 or 1) in the 0 index bit of register 0 (or s0)
+    - cnot qs,qt : Applies CNOT gate on qubits qs and qt where qt is the control qubit, and qs is the controlled qubit (one that changes its state).
+    - cz qs,qt : Controlled Z gate on qs , with qt as control qubit.
+    - swap qs,qt : Swaps the states of qubits qs and qt
+    Note that the qubit number is actually stored in a register. For example, `h $t1` is correct, but `h 1` is not.
+    """
+    def MIPS(self,start_label="",end_label=""):
+        """
+        Generates MIPS code for the quantum gates
+        """
+        global labels
+        L = self.children
+        n = len(L)
+        assert n > 0
+        assert n == self.gates_operands[self.gate] + 2
+        operands = [x for x in L[2:]]
+        if self.gates_operands[self.gate] == 1:
+            assert len(operands) == 1
+            operand = operands[0]
+            if isinstance(operand,Int):operand = f"addi $t1,$zero,{operand.eval()}"
+            elif isinstance(operand,Id):operand = operand.MIPS(ls=False) # skipping loading on stack
+            else:raise ValueError(f"unknown operand {operand}")
+            return "\n".join([
+                f"# {self.gate} gate",
+                operand,
+                f"{self.gate} $t1",
+            ])
+        elif self.gates_operands[self.gate] == 2:
+            assert len(operands) == 2
+            operand1 = operands[0]
+            operand2 = operands[1]
+            if isinstance(operand2,Int):operand2 = f"addi $t7,$zero,{operand2.eval()}"
+            elif isinstance(operand2,Id):operand2 = operand2.MIPS(ls=False) + "\nadd $t7,$zero,$t1 # saving for future use in QGate"
+            else:raise ValueError(f"unknown operand {operand2}")
+            # if isinstance(operand1,Int):operand1 = f"addi $t1,$zero,{operand1.eval()}"
+            if isinstance(operand1,Int) or isinstance(operand1,Id):operand1 = operand1.MIPS(ls=False)
+            else:raise ValueError(f"unknown operand {operand1}")
+            return "\n".join([
+                f"# {self.gate} gate",
+                operand2,
+                operand1,
+                f"{self.gate} $t1,$t7",
+            ])
+        elif self.gate == "CP":
+            assert len(operands) == 3
+            operand1 = operands[0]
+            operand2 = operands[1]
+            operand3 = operands[2]
+            # control qubit
+            if isinstance(operand2,Int):operand2 = f"addi $t7,$zero,{operand2.eval()}"
+            elif isinstance(operand2,Id):operand2 = operand2.MIPS(ls=False) + "\nadd $t7,$zero,$t1 # saving for future use in QGate"
+            else:raise ValueError(f"CP:unknown operand {operand2}")
+            # theta
+            if isinstance(operand1,Id) or isinstance(operand1,Float):operand1 = operand1.MIPS(ls=False) #+ "\nmtc1 $t1,$f12"
+            else:raise ValueError(f"CP:unknown operand {operand1}")
+            # target qubit (updates $t6 and thus, has to be evaluated last so that $t6 has correct value)
+            if isinstance(operand3,Int):operand3 = f"addi $t6,$zero,{operand3.eval()}"
+            elif isinstance(operand3,Id):operand3 = operand3.MIPS(ls=False) + "\nadd $t6,$zero,$t1 # saving for future use in QGate"
+            else:raise ValueError(f"CP:unknown operand {operand3}")
+            return "\n".join([
+                f"# {self.gate} gate",
+                operand2,
+                operand1,
+                operand3,
+                f"{self.gate} $t1,$t7,$t6", # f"{self.gate} $f12,$t7,$t6",
+            ])
+        else:raise ValueError(f"unknown gate {self.gate} with operands {operands}")
+
+class Measurement(Node):
+    name="Measurement"
+    def parse(self,s:list):
+        global QR,QUANTUM_ENABLE
+        if not QUANTUM_ENABLE:return ValueError("Quantum Computing is not enabled")
+        n  = len(s)
+        if not n > 0:return ValueError("syntax error in Measurement")
+        if not s[0][1] == "measure":return ValueError("syntax error in Measurement")
+        if n == 4:
+            if s[1][0] == "id":self.children = [Token("measure"),Id(s[1][1])]
+            elif s[1][0] == "int":self.children = [Token("measure"),Int(s[1][1])]
+            elif s[1][1] == "all":self.children = [Token("measure"),Token("all")]
+            else:return ValueError(f"unknown operands {' '.join([x[0] for x in s[1:]])}")
+            assert s[2][1] == "into"
+            assert s[3][0] == "id"
+            V = Assignable()
+            V.parse(s[3:4])
+            self.children.extend([Token("into"),V])
+        elif n == 6:
+            if s[1][0] == "id":self.children = [Token("measure"),Id(s[1][1])]
+            elif s[1][0] == "int":self.children = [Token("measure"),Int(s[1][1])]
+            elif s[1][1] == "all":self.children = [Token("measure"),Token("all")]
+            else:return ValueError(f"unknown operands {' '.join([x[0] for x in s[1:]])}")
+            assert s[2][1] == "into"
+            assert s[3][0] == "id"
+            V = Assignable()
+            V.parse(s[3:4])
+            self.children.extend([Token("into"),V])
+            assert s[4][1] == "reps"
+            if s[5][0] == "id":self.children.extend([Token("reps"),Id(s[5][1])])
+            elif s[5][0] == "int":self.children.extend([Token("reps"),Int(s[5][1])])
+            else:return ValueError(f"unknown operands {' '.join([x[0] for x in s[1:]])}")
+        else:return ValueError(f"syntax error in Measurement : n = {n}")
+            
+    def eval(self):
+        global QR,QUANTUM_ENABLE,service
+        if not QUANTUM_ENABLE:raise ValueError("Quantum Computing is not enabled")
+        L = self.children
+        n = len(L)
+        if n < 4:raise ValueError(f"error in Measurement: n={n}")
+        if L[1].value == "all":
+            QR.measure_all()
+        else:
+            q = L[1].eval()
+            assert q < QR.num_qubits and q >= 0
+            QR.measure(q,0)
+        if n == 4:shots = 1
+        elif n == 6:
+            shots = L[5].eval()
+            if not isinstance(shots,int):raise ValueError(f"number of reps should be an integer {shots}")
+        backend = Aer.get_backend('qasm_simulator')
+        transpiled_circuit = transpile(QR, backend)
+        job = backend.run(transpiled_circuit, shots=shots)
+        result = job.result().get_counts()
+        if shots > 1 :result = {x:y/shots for x,y in result.items()}
+        elif shots == 1: result = list(result.keys())[0]
+        else: raise ValueError(f"invalid number of repetitions for measurement : {shots}")
+        L[3].update(result)
+
+    def MIPS(self,start_label="",end_label=""):
+        """
+        Generates MIPS code for the measurement
+        """
+        global labels
+        L = self.children
+        n = len(L)
+        if n > 4 and L[4].value == "reps":raise ValueError("`reps` is not to be used with compiler")
+        assert n == 4, f"unknown error in measurement: n = {n}"
+        operand = L[1]
+        if isinstance(operand,Int):operand = f"addi $t2,$zero,{operand.eval()}"
+        elif isinstance(operand,Id):operand = operand.MIPS(ls=False) + "\nadd $t2,$t1,$zero"
+        elif operand.value == "all":operand = "all"
+        else:raise ValueError(f"unknown operand {operand}")
+        if operand == "all":
+            meas = "\n".join([
+                "add $t1,$zero,$zero",
+                f"# Measure all qubits",
+                "\n".join(["\n".join([
+                    f"addi $t2,$zero,{i}",
+                    "sll $t1,$t1,1",
+                    "measure $t2",
+                    ]) for i in range(4,-1,-1)])
+            ])
+        else:
+            meas= "\n".join([
+                operand,
+                "add $t1,$zero,$zero",
+                f"# Measurement",
+                f"measure $t2 #this stores the measurement in the 0th index of the register $t1",
+            ])
+        # storing into identifier
+        toret = "\n".join([
+            meas,
+            f"# Storing measurement into {L[3].children[0].name}",
+            L[3].MIPS(up=True,ls=False)
+        ])
+        return toret
+
+class ClearQC(Node):
+    name="ClearQC"
+    def parse(self,s:list):
+        global QR,QUANTUM_ENABLE
+        if not QUANTUM_ENABLE:return ValueError("Quantum Computing is not enabled")
+        n = len(s)
+        if not n == 1:return ValueError("syntax error in ClearQC")
+        if not s[0][1] == "clearQ":return ValueError("syntax error in ClearQC")
+        self.children = [Token("clearQ")]
+    def eval(self):
+        global QR,QUANTUM_ENABLE
+        if not QUANTUM_ENABLE:raise ValueError("Quantum Computing is not enabled")
+        QR.clear()
+    def MIPS(self,start_label="",end_label=""):
+        return "# clear the quantum register\n" + "\n".join([f"addi $t1,$zero,{q}\nreset $t1" for q in range(5)])
+
 
 def TakeIn(prompt:str=""):
     """
@@ -2098,6 +2374,7 @@ def TakeIn(prompt:str=""):
     except:
         try:return float(x)
         except:return x
+
 
 def PushIn(L:list,x):
     """
@@ -2122,7 +2399,7 @@ def GetLength(L):
     """
     Returns the length of a list
     """
-    if isinstance(L,list) or isinstance(L,dict):return len(L)
+    if isinstance(L,list) or isinstance(L,dict) or isinstance(L,str):return len(L)
     if isinstance(L,ndarray):return L.shape[0]
     else:raise ValueError(f"trying to get length of a non-list {L}")
 
@@ -2157,6 +2434,61 @@ def WriteFile(path,s=""):
         return 1
     except:return ValueError(f"couldn't write to {path}")
 
+def RunCodeFile(file):
+    """
+    Runs the code in a file. This is similar to the `eval` in python
+    """
+    s = open(file,'r').read()
+    s = lex(s)
+    s0 = Statements()
+    res = s0.parse(s)
+    if isinstance(res,ValueError):
+        print("Compilation error in",file)
+        return
+    try:s0.eval()
+    except Exception as e:
+        print("Run-time error in",file,":",e)
+        return
+
+def DrawQCircuit():
+    """
+    Draws the quantum circuit
+    """
+    global QR,QUANTUM_ENABLE
+    if not QUANTUM_ENABLE:raise ValueError("Quantum Computing is not enabled")
+    print(QR.draw(output='text', style={'backgroundcolor': '#EEEEEE'}))
+
+def Split(x:str,s:str):
+    return s.split("x")
+
+int_syscall_file = open("helpers/int_sys.s",'r')
+int_syscall_mips =  int_syscall_file.read()
+int_syscall_file.close()
+
+float_syscall_file = open("helpers/float_sys.s",'r')
+float_syscall_mips =  float_syscall_file.read()
+float_syscall_file.close()
+
+str_syscall_file = open("helpers/int2str_sys.s",'r')
+str_syscall_mips =  str_syscall_file.read()
+str_syscall_file.close()
+
+input_syscall_file = open("helpers/input.s",'r')
+input_syscall_mips =  input_syscall_file.read()
+input_syscall_file.close()
+
+split_syscall_file = open("helpers/split.s",'r')
+split_syscall_mips =  split_syscall_file.read()
+split_syscall_file.close()
+
+len_syscall_mips = "\n".join([
+    "# getting length "
+    "lw $t0,0($s1) # load list/str",
+    "lw $t1,0($t0) # 4N",
+    "srl $t1,$t1,2 # N",
+    "sw $t1,0($s1) #replaced with length",
+])
+
 DEFAULT_SYMBOLS = {
     "nl":"\n",
     "tab":"\t",
@@ -2164,16 +2496,20 @@ DEFAULT_SYMBOLS = {
     "true":True,
     "false":False,
     "null":None,
-    "input":SysCall("input",TakeIn),
-    "int":SysCall("int",int),
-    "float":SysCall("float",float),
+    "input":SysCall("input",TakeIn,input_syscall_mips),
+    "int":SysCall("int",int,int_syscall_mips),
+    "float":SysCall("float",float,float_syscall_mips),
+    "int2str":SysCall("int2str",lambda x:str(to_tuple(x)),str_syscall_mips),
     "str":SysCall("str",lambda x:str(to_tuple(x))),
+    "split":SysCall("split",Split,split_syscall_mips),
     "push":SysCall("push",PushIn),
     "pop":SysCall("pop",PopOut),
-    "len":SysCall("len",GetLength),
+    "len":SysCall("len",GetLength,len_syscall_mips),
     "keys":SysCall("keys",GetKeys),
     "read":SysCall("read",ReadFile),
     "write":SysCall("write",WriteFile),
+    "drawQC":SysCall("drawQC",DrawQCircuit),
+    "import":SysCall("import",RunCodeFile),
 }
 
 def set_defaults(D:dict):
@@ -2198,7 +2534,7 @@ def PrintError(Err):
     print(m,"\n")
     PrintError(Err)
 
-def RunPretty(s,vis=False):
+def RunPretty(s,vis=False,file=None):
     global TESTING,SYMBOLSTACK,DEFAULT_SYMBOLS
     SYMBOLSTACK = [DEFAULT_SYMBOLS.copy()]
     print("_"*50 + "\n")
@@ -2232,7 +2568,9 @@ def RunPretty(s,vis=False):
         #print("_"*50 + "\n")
         if vis == "True":
             s0.PlotTree()
-            Graph.render(file + ".png",format='png',view=True)
+            if file[-5:] == ".algl":file = file[:-5]
+            Graph.render(file,format='png')
+            print(f"saved AST to {file}.png")
 
 def RunFilePretty(filename,vis=False):
     try:file = open(filename,'r')
@@ -2240,7 +2578,8 @@ def RunFilePretty(filename,vis=False):
         print(filename,"not found in this directory")
         return
     s = file.read()
-    RunPretty(s,vis)
+    RunPretty(s,vis,filename)
+
 
 def TestFile(filename):
     global TESTING,SYMBOLSTACK,DEFAULT_SYMBOLS
@@ -2280,10 +2619,32 @@ def TestFile(filename):
     print(filename,"ran")
     TESTING = old_TESTING
 
-def ToMIPS(s:str,output_file=None,Format="spim"):
-    global MIPSPrint
-    set_defaults({"self":None,"parent":None})
+def ToMIPS(s:str,output_file=None,Format="VM"):
+    global MIPSPrint,QUANTUM_ENABLE
+    if Format == "VM":QUANTUM_ENABLE = True
+    else: QUANTUM_ENABLE = False
+    SYSCALLSDONE = ["int","float","int2str","input","len"]
+    if not ADD_SYSCALLS : SYSCALLSDONE = []
+    new_defs = {"self":None,"parent":None,
+    # "int":DEFAULT_SYMBOLS["int"],
+    # "float":DEFAULT_SYMBOLS["float"],
+    # "int2str":DEFAULT_SYMBOLS["int2str"],
+    # "input":DEFAULT_SYMBOLS["input"],
+    # "len":DEFAULT_SYMBOLS["len"],
+    }
+    for sysc in SYSCALLSDONE : new_defs[sysc] = DEFAULT_SYMBOLS[sysc]
+    set_defaults(new_defs)
     set_symbolstack([{"creator-base":1,"self":2,"parent":3}])
+
+    # Add syscalls
+    syscalls = []
+    for f in DEFAULT_SYMBOLS:
+        fc = DEFAULT_SYMBOLS[f]
+        if not isinstance(fc,SysCall):continue
+        SYMBOLSTACK[-1][f] = len(SYMBOLSTACK[-1]) + 1
+        syscalls.append(fc.MIPS())
+    syscalls = "\n".join(syscalls)
+
     s = lex(s)
     s0 = Statements()
     res = s0.parse(s)
@@ -2291,10 +2652,14 @@ def ToMIPS(s:str,output_file=None,Format="spim"):
         PrintError(res)
         return
     mips_code = s0.MIPS(False)
-    n = len(SYMBOLSTACK[-1])
+
+    n = len(SYMBOLSTACK[-1]) # this is before adding syscalls.. important
+
+
     error_log = "error:" + MIPSPrint("ERROR")
-    if Format == "cpulator":mips_code = open("helpers/cpulator.s").read().format(mips_code=mips_code,error_log = error_log,m4n=-4*n)
-    elif Format == "spim":mips_code = open("helpers/spim.s").read().format(mips_code=mips_code,error_log = error_log,m4n=-4*n)
+    if Format == "cpulator":mips_code = open("helpers/cpulator.s").read().format(mips_code=mips_code,error_log = error_log,m4n=-4*n,syscalls=syscalls)
+    elif Format == "spim":mips_code = open("helpers/spim.s").read().format(mips_code=mips_code,error_log = error_log,m4n=-4*n,syscalls=syscalls)
+    elif Format == "VM":mips_code = open("helpers/VM.s").read().format(mips_code=mips_code,error_log = error_log,m4n=-4*n,syscalls=syscalls)
     else:raise ValueError("Unsupported format for output code")
     if output_file is not None:
         if output_file[-2:] != ".s": output_file = output_file + ".s"

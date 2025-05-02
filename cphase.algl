@@ -1,0 +1,20 @@
+let pi = 3.14159265;
+let piby2 = pi/2;
+let getit = alg(){
+    clearQ;
+    QG H 0;
+    QG H 1;
+    QG CP piby2 0 1;
+    QG H 0;
+    let x;
+    measure 0 into x;
+    return x;
+};
+let count = 0;
+let N = 1000;
+let i = 0;
+while i < N {
+    count = count + getit();
+    i = i + 1;
+}
+print count/N;
