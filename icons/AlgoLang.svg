@@ -1,0 +1,20 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background is transparent -->
+  <circle cx="128" cy="128" r="80" stroke="#778877" stroke-width="6" fill="none"/>
+  <!-- Equator line -->
+  <ellipse cx="128" cy="128" rx="80" ry="40" stroke="#778877" stroke-width="3" fill="none"/>
+  <!-- Vertical axis -->
+  <line x1="128" y1="48" x2="128" y2="208" stroke="#778877" stroke-width="3"/>
+  <!-- Horizontal axis -->
+  <line x1="48" y1="128" x2="208" y2="128" stroke="#778877" stroke-width="3" stroke-dasharray="6 6"/>
+  <!-- Highlighted quantum states -->
+  <circle cx="128" cy="48" r="6" fill="#778877"/>
+  <circle cx="128" cy="208" r="6" fill="#778877"/>
+  <circle cx="48" cy="128" r="6" fill="#778877"/>
+  <circle cx="208" cy="128" r="6" fill="#778877"/>
+  <!-- MIPS-inspired circuit lines -->
+  <path d="M128 48 L180 80 L180 176 L128 208" stroke="#778877" stroke-width="2" fill="none"/>
+  <path d="M128 48 L76 80 L76 176 L128 208" stroke="#778877" stroke-width="2" fill="none"/>
+  <!-- Terminal Plot Representation -->
+  <polyline points="80,160 100,140 120,150 140,120 160,130 180,100" stroke="#778877" stroke-width="2" fill="none"/>
+</svg>
