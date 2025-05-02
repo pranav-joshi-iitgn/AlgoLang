@@ -1,11 +1,9 @@
-# This code can be run on the SPIM simulator. It can be installed on debian/ubuntu as :
-# `sudo apt-get install spim`
-# Then, you can run the code as `spim -f <filename>`
+# This code can be run on the Virtual Machine PyVM that comes bundled with the project
 
 .data
 .text
 .globl main
-j main # redundant, but needed for the VM
+j main # this is because the VM goes to the first line directly, and not to main.
 
 pathfinder:
 add $t1,$ra,$zero
@@ -39,7 +37,6 @@ addi $s1,$s0,{m4n}
 # main code 
 
 {mips_code}
-
 
 # print newline via syscall 11 to clean up
 addi $a0, $0, 10
