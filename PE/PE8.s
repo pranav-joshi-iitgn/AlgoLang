@@ -11,14 +11,22 @@ add $t1,$ra,$zero
 jr $ra
 
 main:
+li $sp,0x60000000
 addi $s0,$sp,0
 addi $s5,$sp,4
+addi $s1,$s0,-16
 
+jal pathfinder
+addi $t1,$t1,16
+li $t2,0x80000000
+or $t1,$t1,$t2
+sw $t1,-8($s0)
+
+thestart:
 addi $t8,$zero,1
 addi $t9,$zero,1
-addi $s1,$s0,-4
 
-# Definition : s is -4($s0)
+# Definition : s is -16($s0)
 
 # putting "7316717653133062491922511967442657474235534919493496983520312774506326239578318016984801869478851843858615607891129494954595017379583319528532088055111254069874715852386305071569329096329522744304355766896648950445244523161731856403098711121722383113622298934233803081353362766142828064444866452387493035890729629049156044077239071381051585930796086670172427121883998797908792274921901699720888093776657273330010533678812202354218097512545405947522435258490771167055601360483958644670632441572215539753697817977846174064955149290862569321978468622482839722413756570560574902614079729686524145351004748216637048440319989000889524345065854122758866688116427171479924442928230863465674813919123162824586178664583591245665294765456828489128831426076900422421902267105562632111110937054421750694165896040807198403850962455444362981230987879927244284909188845801561660979191338754992005240636899125607176060588611646710940507754100225698315520005593572972571636269561882670428252483600823257530420752963450" on heap 
 add $t0,$s5,$zero
@@ -2030,7 +2038,7 @@ addi $s1,$s1,-4
 sw $t0,0($s1)
 
 lw $t1,0($s1) # get value
-addi $t0,$s0,-4 # load variable address
+addi $t0,$s0,-16 # load variable address
 sw $t1,0($t0) # update the value at variable address
 addi $s1,$s1,4 # remove the value on stack
 
@@ -2097,25 +2105,59 @@ sw $t0,0($s1)
 lw $t0, 0($s1)
 srl $t1,$t0,29
 addi $t3,$zero,7
-beq $t1,$zero,label2 # 000 -> int
-beq $t1,$t3,label2 # 111 -> int
-srl $t1,$t1,1
-bne $t1,$t8,error # 010 or 011 are for str and list
+addi $t4,$zero,4
+beq $t1,$zero,label3 # 000 -> int
+beq $t1,$t3,label3 # 111 -> int
+beq $t1,$t4,label_alg3 # 100 -> alg .. printed as int
+addi $t3,$zero,3
+bne $t1,$t3,label2 # 011 is for str
+
+# print a string
 lw $t1,0($t0) # 4n
-addi $v0,$zero,11 # str
+addi $v0,$zero,11 # for printing characters
 label1: # print character routine
 slt $t3,$zero,$t1
-beq $t3,$zero,label3 # if t1 <= 0, finish
+beq $t3,$zero,label4 # if t1 <= 0, finish
 addi $t0,$t0,4 # next character
 lw $a0,0($t0) #put char in buffer
 syscall # print char
 addi $t1,$t1,-4 # decr remaining bytes by 1
-j label1 # continue printing charactters
-label2:# int
-addi $v0, $zero,1
+j label1 # continue printing characters
+
+label2:#print float
+addi $v0,$zero,2
+mtc1 $t0,$f12
+syscall
+j label4
+
+label_alg3:#print alg
+addi $v0,$zero,11
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'l'
+syscall
+addi $a0,$zero,'g'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $a0,$zero,'a'
+syscall
+addi $a0,$zero,'t'
+syscall
+addi $a0,$zero,' '
+syscall
+addi $v0,$zero,1
 add $a0,$t0,$zero
 syscall
-label3:# end print
+j label4
+
+
+label3:#print int
+addi $v0,$zero,1
+add $a0,$t0,$zero
+syscall
+
+label4:# end print
 addi $s1,$s1,4
 # print newline via syscall 11 to clean up
 addi $a0, $zero, 10
@@ -2133,10 +2175,21 @@ theend:
 # Exit via syscall 10
 addi $v0,$zero,10
 syscall #10
-error:
-addi $a0, $zero, -1
-addi $v0, $zero, 1
+error:#Print ERROR
+addi $v0,$zero,11
+addi $a0,$zero,69 #E
 syscall
+addi $a0,$zero,82 #R
+syscall
+addi $a0,$zero,82 #R
+syscall
+addi $a0,$zero,79 #O
+syscall
+addi $a0,$zero,82 #R
+syscall
+addi $a0,$zero,10 # newline
+syscall
+
 # Exit via syscall 10
 addi $v0,$zero,10
 syscall #10
